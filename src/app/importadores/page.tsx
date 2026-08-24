@@ -1,0 +1,355 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+
+interface Empresa {
+  id: string;
+  razao_social: string;
+  cnpj: string;
+  endereco: string | null;
+  sac_email: string | null;
+  logo_url: string | null;
+  created_at: string;
+}
+
+export default function ImportadoresPage() {
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null); // Guarda o ID se for edição
+  const [error, setError] = useState<string | null>(null);
+
+  // Estado do formulário
+  const [formData, setFormData] = useState({
+    razao_social: "",
+    cnpj: "",
+    endereco: "",
+    sac_email: "",
+    logo_url: "",
+  });
+
+  async function buscarEmpresas() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("empresas")
+      .select("*")
+      .order("razao_social");
+
+    if (error) {
+      console.error("Erro ao buscar empresas:", error);
+    } else if (data) {
+      setEmpresas(data);
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    buscarEmpresas();
+  }, []);
+
+  // Abre o modal em modo de cadastro
+  function handleNovo() {
+    setEditingId(null);
+    setFormData({
+      razao_social: "",
+      cnpj: "",
+      endereco: "",
+      sac_email: "",
+      logo_url: "",
+    });
+    setError(null);
+    setIsModalOpen(true);
+  }
+
+  // Abre o modal preenchido em modo de edição
+  function handleEditar(empresa: Empresa) {
+    setEditingId(empresa.id);
+    setFormData({
+      razao_social: empresa.razao_social,
+      cnpj: empresa.cnpj,
+      endereco: empresa.endereco || "",
+      sac_email: empresa.sac_email || "",
+      logo_url: empresa.logo_url || "",
+    });
+    setError(null);
+    setIsModalOpen(true);
+  }
+
+  // Função para deletar importador
+  async function handleExcluir(id: string, nome: string) {
+    const confirmar = confirm(
+      `ATENÇÃO:\nDeseja mesmo excluir o importador "${nome}"?\n\nIsso apagará permanentemente todos os produtos e certificados vinculados a ele!`
+    );
+
+    if (!confirmar) return;
+
+    const { error: deleteError } = await supabase
+      .from("empresas")
+      .delete()
+      .eq("id", id);
+
+    if (deleteError) {
+      alert("Erro ao excluir importador. Verifique as dependências.");
+    } else {
+      await buscarEmpresas(); // Atualiza a lista na tela
+    }
+  }
+
+  // Salvar ou Atualizar
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+
+    if (editingId) {
+      // MODO EDICAO
+      const { error: updateError } = await supabase
+        .from("empresas")
+        .update({
+          razao_social: formData.razao_social,
+          cnpj: formData.cnpj,
+          endereco: formData.endereco || null,
+          sac_email: formData.sac_email || null,
+          logo_url: formData.logo_url || null,
+        })
+        .eq("id", editingId);
+
+      if (updateError) {
+        setError("Erro ao atualizar dados. Verifique o CNPJ.");
+        setSaving(false);
+      } else {
+        setIsModalOpen(false);
+        await buscarEmpresas();
+        setSaving(false);
+      }
+    } else {
+      // MODO CADASTRO
+      const { error: insertError } = await supabase
+        .from("empresas")
+        .insert([
+          {
+            razao_social: formData.razao_social,
+            cnpj: formData.cnpj,
+            endereco: formData.endereco || null,
+            sac_email: formData.sac_email || null,
+            logo_url: formData.logo_url || null,
+          },
+        ]);
+
+      if (insertError) {
+        if (insertError.code === "23505") {
+          setError("Este CNPJ já está cadastrado para outro importador.");
+        } else {
+          setError("Erro ao salvar importador.");
+        }
+        setSaving(false);
+      } else {
+        setIsModalOpen(false);
+        await buscarEmpresas();
+        setSaving(false);
+      }
+    }
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Cabeçalho */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Importadores</h1>
+          <p className="text-slate-500 text-sm mt-1">
+            Cadastre e gerencie as empresas importadoras clientes da Kairós.
+          </p>
+        </div>
+        <button
+          onClick={handleNovo}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-4 py-2.5 rounded-lg shadow-sm transition flex items-center space-x-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+          </svg>
+          <span>Novo Importador</span>
+        </button>
+      </div>
+
+      {/* Lista / Tabela */}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+        {loading ? (
+          <div className="text-center py-12 text-slate-500">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            Carregando importadores...
+          </div>
+        ) : empresas.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-100">
+              <thead>
+                <tr className="text-left text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="pb-3">Logo</th>
+                  <th className="pb-3">Razão Social</th>
+                  <th className="pb-3">CNPJ</th>
+                  <th className="pb-3">E-mail SAC</th>
+                  <th className="pb-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm">
+                {empresas.map((empresa) => (
+                  <tr key={empresa.id} className="hover:bg-slate-50/30">
+                    <td className="py-4">
+                      {empresa.logo_url ? (
+                        <img
+                          src={empresa.logo_url}
+                          alt="Logo"
+                          className="w-8 h-8 rounded-full object-cover border border-slate-100 bg-white"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs uppercase">
+                          {empresa.razao_social.substring(0, 2)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-4 font-semibold text-slate-700">{empresa.razao_social}</td>
+                    <td className="py-4 text-slate-500">{empresa.cnpj}</td>
+                    <td className="py-4 text-slate-500">{empresa.sac_email || "Não informado"}</td>
+                    <td className="py-4 text-right space-x-3">
+                      <button
+                        onClick={() => handleEditar(empresa)}
+                        className="text-blue-600 hover:text-blue-800 font-semibold text-xs"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleExcluir(empresa.id, empresa.razao_social)}
+                        className="text-red-500 hover:text-red-700 font-semibold text-xs"
+                      >
+                        Excluir
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center py-12 text-slate-500 italic">
+            Nenhum importador cadastrado. Clique no botão acima para adicionar.
+          </div>
+        )}
+      </div>
+
+      {/* MODAL DE CADASTRO/EDIÇÃO */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-100 max-w-lg w-full p-6 space-y-6">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <h3 className="text-lg font-bold text-slate-800">
+                {editingId ? "Editar Importador" : "Novo Importador"}
+              </h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="p-3 bg-red-50 text-red-700 text-xs rounded-lg font-medium">{error}</div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Razão Social *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.razao_social}
+                  onChange={(e) => setFormData({ ...formData, razao_social: e.target.value })}
+                  placeholder="Ex: STONE IMPORT LTDA"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    CNPJ *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.cnpj}
+                    onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
+                    placeholder="Ex: 00.000.000/0001-00"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    E-mail SAC
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.sac_email}
+                    onChange={(e) => setFormData({ ...formData, sac_email: e.target.value })}
+                    placeholder="Ex: sac@empresa.com.br"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Endereço Completo
+                </label>
+                <input
+                  type="text"
+                  value={formData.endereco}
+                  onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
+                  placeholder="Rua, Número, Bairro, Cidade - Estado"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  URL da Logomarca (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.logo_url}
+                  onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
+                  placeholder="https://exemplo.com/logo.png"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-500 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm disabled:opacity-50"
+                >
+                  {saving ? "Salvando..." : "Salvar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
