@@ -30,6 +30,8 @@ export default function ImportadoresPage() {
     logo_url: "",
   });
 
+  const [logoFile, setLogoFile] = useState<File | null>(null); // Armazena o arquivo de imagem selecionado localmente no computador
+
   async function buscarEmpresas() {
     setLoading(true);
     const { data, error } = await supabase
@@ -52,6 +54,7 @@ export default function ImportadoresPage() {
   // Abre o modal em modo de cadastro
   function handleNovo() {
     setEditingId(null);
+    setLogoFile(null); // Limpa seleção de arquivo
     setFormData({
       razao_social: "",
       cnpj: "",
@@ -66,6 +69,7 @@ export default function ImportadoresPage() {
   // Abre o modal preenchido em modo de edição
   function handleEditar(empresa: Empresa) {
     setEditingId(empresa.id);
+    setLogoFile(null); // Limpa seleção de arquivo
     setFormData({
       razao_social: empresa.razao_social,
       cnpj: empresa.cnpj,
@@ -97,27 +101,67 @@ export default function ImportadoresPage() {
     }
   }
 
-  // Salvar ou Atualizar
+  // Salvar ou Atualizar com suporte a Upload de Arquivo do Computador
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
 
+    const razaoSocialSanitizada = formData.razao_social.trim();
+    const cnpjSanitizado = formData.cnpj.trim();
+    const sacEmailSanitizado = formData.sac_email.trim() || null;
+    const enderecoSanitizado = formData.endereco.trim() || null;
+    let logoUrlFinal = formData.logo_url.trim() || null;
+
+    // 1. Lógica de Upload do Arquivo para o Supabase Storage (se houver novo arquivo selecionado)
+    if (logoFile) {
+      try {
+        const fileExt = logoFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+        const filePath = `logos-empresas/${fileName}`;
+
+        // Faz o upload para o bucket 'logos' no Supabase
+        const { error: uploadError } = await supabase.storage
+          .from("logos")
+          .upload(filePath, logoFile);
+
+        if (uploadError) {
+          throw new Error("Falha ao subir imagem para o Storage: " + uploadError.message);
+        }
+
+        // Recupera a URL pública gerada para salvar no banco
+        const { data: { publicUrl } } = supabase.storage
+          .from("logos")
+          .getPublicUrl(filePath);
+
+        logoUrlFinal = publicUrl;
+      } catch (err: any) {
+        setError(err.message || "Erro no upload do arquivo.");
+        setSaving(false);
+        return;
+      }
+    }
+
+    // 2. Gravação das informações no Banco de Dados
     if (editingId) {
       // MODO EDICAO
       const { error: updateError } = await supabase
         .from("empresas")
         .update({
-          razao_social: formData.razao_social,
-          cnpj: formData.cnpj,
-          endereco: formData.endereco || null,
-          sac_email: formData.sac_email || null,
-          logo_url: formData.logo_url || null,
+          razao_social: razaoSocialSanitizada,
+          cnpj: cnpjSanitizado,
+          endereco: enderecoSanitizado,
+          sac_email: sacEmailSanitizado,
+          logo_url: logoUrlFinal,
         })
         .eq("id", editingId);
 
       if (updateError) {
-        setError("Erro ao atualizar dados. Verifique o CNPJ.");
+        if (updateError.code === "23505") {
+          setError("Este CNPJ já está cadastrado para outro importador.");
+        } else {
+          setError("Erro ao atualizar dados. Verifique os campos ou o CNPJ.");
+        }
         setSaving(false);
       } else {
         setIsModalOpen(false);
@@ -130,11 +174,11 @@ export default function ImportadoresPage() {
         .from("empresas")
         .insert([
           {
-            razao_social: formData.razao_social,
-            cnpj: formData.cnpj,
-            endereco: formData.endereco || null,
-            sac_email: formData.sac_email || null,
-            logo_url: formData.logo_url || null,
+            razao_social: razaoSocialSanitizada,
+            cnpj: cnpjSanitizado,
+            endereco: enderecoSanitizado,
+            sac_email: sacEmailSanitizado,
+            logo_url: logoUrlFinal,
           },
         ]);
 
@@ -319,15 +363,20 @@ export default function ImportadoresPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  URL da Logomarca (Opcional)
+                  Logomarca da Empresa (PNG / JPG)
                 </label>
                 <input
-                  type="text"
-                  value={formData.logo_url}
-                  onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
-                  placeholder="https://exemplo.com/logo.png"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) setLogoFile(file);
+                  }}
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white file:mr-3 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 outline-none cursor-pointer"
                 />
+                {formData.logo_url && !logoFile && (
+                  <p className="text-[10px] text-slate-400 mt-1">Logo atual preservada. Escolha outro arquivo apenas se desejar alterá-la.</p>
+                )}
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">

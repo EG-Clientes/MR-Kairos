@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import JsBarcode from "jsbarcode";
 
 interface Produto {
   id: string;
   fty_no: string;
   descricao: string;
   ean_13: string | null;
+  ean_barras: string | null;
+  data_fabricacao: string | null;
+  lote: string | null;
   usa_pilha: boolean;
   contem_ima: boolean;
   partes_pequenas: boolean;
@@ -24,6 +28,8 @@ interface Produto {
   inmetro_familias: {
     nome_familia: string;
     numero_registro: string;
+    ocp_nome: string | null;
+    ocp_numero: string | null;
   } | null;
 }
 
@@ -31,6 +37,33 @@ export default function GeradorEtiquetasPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Referência para o elemento SVG do código de barras
+  const barcodeRef = useRef<SVGSVGElement>(null);
+
+  // ÚNICO Efeito para renderizar o código de barras localmente via JsBarcode
+  useEffect(() => {
+    const codigoParaDesenho = produtoSelecionado?.ean_barras || produtoSelecionado?.ean_13;
+
+    if (codigoParaDesenho && barcodeRef.current) {
+      // HIGIENIZAÇÃO: Remove automaticamente aspas duplas, aspas simples, espaços ou traços do código
+      const codigoLimpo = codigoParaDesenho.replace(/["'\s-]/g, "");
+
+      try {
+        JsBarcode(barcodeRef.current, codigoLimpo, {
+          format: "EAN13",
+          displayValue: true,
+          fontSize: 14,
+          height: 38,
+          margin: 0,
+          background: "transparent",
+          lineColor: "#000000",
+        });
+      } catch (err) {
+        console.error("Erro ao gerar o código de barras EAN-13 localmente:", err);
+      }
+    }
+  }, [produtoSelecionado]);
 
   // Carrega os produtos com todas as suas relações de empresas e certificados
   async function carregarProdutos() {
@@ -40,7 +73,7 @@ export default function GeradorEtiquetasPage() {
       .select(`
         *,
         empresas(razao_social, cnpj, endereco, sac_email, logo_url),
-        inmetro_familias(nome_familia, numero_registro)
+        inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero)
       `)
       .order("descricao");
 
@@ -86,6 +119,16 @@ export default function GeradorEtiquetasPage() {
   }
 
   const avisos = produtoSelecionado ? gerarTextosDeAtencao(produtoSelecionado) : [];
+
+  // Algoritmo de Auto-Scale de Compliance: calcula o tamanho do texto para auto-ajustar a fonte
+  const totalCaracteresAvisos = avisos.reduce((acc, texto) => acc + texto.length, 0);
+  let classTamanhoFonte = "text-[8px] leading-tight";
+  
+  if (totalCaracteresAvisos > 450) {
+    classTamanhoFonte = "text-[6px] leading-[1.1]"; // Fonte menor para textos muito longos
+  } else if (totalCaracteresAvisos > 200) {
+    classTamanhoFonte = "text-[7px] leading-tight"; // Fonte média
+  }
 
   return (
     <div className="space-y-8 print:p-0">
@@ -169,14 +212,14 @@ export default function GeradorEtiquetasPage() {
 
                 {/* Bloco do Meio: Avisos Legais Inteligentes e Ícone 0-3 */}
                 <div className="flex-1 flex items-center justify-between py-2 space-x-2">
-                  <div className="flex-1 text-center font-bold text-[8px] text-slate-800 space-y-1 max-h-[140px] overflow-hidden">
+                  <div className={`flex-1 text-center font-bold ${classTamanhoFonte} text-slate-800 space-y-1 max-h-[140px] overflow-hidden`}>
                     {avisos.map((aviso, i) => (
                       <p key={i}>{aviso}</p>
                     ))}
-                    <p className="uppercase text-slate-900 text-[8px] tracking-wide mt-1 font-extrabold">
+                    <p className="uppercase text-slate-900 font-extrabold tracking-wide mt-1">
                       INDICADO PARA CRIANÇAS MAIORES DE {produtoSelecionado.idade_minima || "3 ANOS"}.
                     </p>
-                    <p className="uppercase text-slate-800 text-[7px] font-semibold">
+                    <p className="uppercase text-slate-800 font-semibold">
                       GUARDAR PARA EVENTUAIS CONSULTAS.
                     </p>
                   </div>
@@ -211,13 +254,13 @@ export default function GeradorEtiquetasPage() {
                       <span className="font-bold">Endereço:</span> {produtoSelecionado.empresas?.endereco || "Não informado"}
                     </p>
                     <p>
-                      <span className="font-bold">Fabricação:</span> {(() => {
+                      <span className="font-bold">Fabricação:</span> {produtoSelecionado.data_fabricacao || (() => {
                         const d = new Date();
                         return `${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
                       })()}
                     </p>
                     <p>
-                      <span className="font-bold">Lote:</span> {(() => {
+                      <span className="font-bold">Lote:</span> {produtoSelecionado.lote || (() => {
                         const d = new Date();
                         return `${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
                       })()}
@@ -235,13 +278,16 @@ export default function GeradorEtiquetasPage() {
 
                   {/* Coluna 2: Código de Barras e Inmetro */}
                   <div className="flex flex-col items-end space-y-1">
-                    {/* Código de barras dinâmico via API do Tec-It */}
-                    {produtoSelecionado.ean_13 && (
-                      <img
-                        src={`https://barcode.tec-it.com/barcode.ashx?data=${produtoSelecionado.ean_13}&code=EAN13&imagetype=Png&translate-esc=false`}
-                        alt="EAN Barcode"
+                    {/* Código de barras dinâmico gerado localmente em SVG */}
+                    {produtoSelecionado.ean_13 ? (
+                      <svg 
+                        ref={barcodeRef} 
                         className="h-7 w-24 object-contain"
-                      />
+                      ></svg>
+                    ) : (
+                      <div className="h-7 w-24 bg-slate-50 flex items-center justify-center text-[6px] text-slate-400 border border-dashed border-slate-200 rounded">
+                        Sem EAN
+                      </div>
                     )}
 
                     {/* Selo do Inmetro no Layout Exato */}
@@ -249,8 +295,12 @@ export default function GeradorEtiquetasPage() {
                       <div className="border border-slate-400 p-1 rounded flex items-center space-x-1 bg-white flex-shrink-0 w-28 justify-between">
                         <div className="text-[5px] font-bold text-slate-800 leading-tight">
                           <p>Segurança</p>
-                          <p className="text-[7px] font-extrabold text-slate-900 leading-none my-0.5">brics</p>
-                          <p>OCP 0098</p>
+                          <p className="text-[7px] font-extrabold text-slate-900 leading-none my-0.5 uppercase">
+                            {produtoSelecionado.inmetro_familias.ocp_nome || "brics"}
+                          </p>
+                          <p>
+                            OCP {produtoSelecionado.inmetro_familias.ocp_numero || "0098"}
+                          </p>
                         </div>
                         <div className="flex flex-col items-center">
                           {/* Símbolo do Inmetro estilizado em CSS */}

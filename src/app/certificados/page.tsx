@@ -2,6 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+// Helper para formatar data YYYY-MM-DD para DD/MM/YYYY sem sofrer desvios de fuso horário (timezone offset)
+function formatarDataSemOffset(dataString: string | null | undefined): string {
+  if (!dataString) return "";
+  const partes = dataString.split("T")[0].split("-");
+  if (partes.length !== 3) return dataString;
+  const [ano, mes, dia] = partes;
+  return `${dia}/${mes}/${ano}`;
+}
 
 interface Empresa {
   id: string;
@@ -16,6 +24,8 @@ interface Certificado {
   data_emissao: string;
   data_validade: string;
   status: string;
+  ocp_nome: string | null;   // Adicionado aqui
+  ocp_numero: string | null; // Adicionado aqui
   empresas: { razao_social: string } | null;
 }
 
@@ -36,20 +46,27 @@ export default function CertificadosPage() {
     data_emissao: "",
     data_validade: "",
     status: "Ativo",
+    ocp_nome: "brics",    // Adicionado aqui com valor padrão
+    ocp_numero: "0098",   // Adicionado aqui com valor padrão
   });
 
   async function carregarDados() {
     setLoading(true);
 
-    const { data: certData, error: certError } = await supabase
-      .from("inmetro_familias")
-      .select("*, empresas(razao_social)")
-      .order("created_at");
+    // Carrega certificados e empresas em paralelo
+    const [certResult, empResult] = await Promise.all([
+      supabase
+        .from("inmetro_familias")
+        .select("*, empresas(razao_social)")
+        .order("created_at"),
+      supabase
+        .from("empresas")
+        .select("id, razao_social")
+        .order("razao_social")
+    ]);
 
-    const { data: empData, error: empError } = await supabase
-      .from("empresas")
-      .select("id, razao_social")
-      .order("razao_social");
+    const { data: certData, error: certError } = certResult;
+    const { data: empData, error: empError } = empResult;
 
     if (!certError && certData) setCertificados(certData as any);
     if (!empError && empData) {
@@ -73,6 +90,8 @@ export default function CertificadosPage() {
       data_emissao: "",
       data_validade: "",
       status: "Ativo",
+      ocp_nome: "brics",    // Adicionado aqui
+      ocp_numero: "0098",   // Adicionado aqui
     });
     setError(null);
     setIsModalOpen(true);
@@ -88,6 +107,8 @@ export default function CertificadosPage() {
       data_emissao: cert.data_emissao,
       data_validade: cert.data_validade,
       status: cert.status,
+      ocp_nome: cert.ocp_nome || "brics",    // Adicionado aqui
+      ocp_numero: cert.ocp_numero || "0098", // Adicionado aqui
     });
     setError(null);
     setIsModalOpen(true);
@@ -130,6 +151,8 @@ export default function CertificadosPage() {
           data_emissao: formData.data_emissao,
           data_validade: formData.data_validade,
           status: formData.status,
+          ocp_nome: formData.ocp_nome.trim() || null,     // Adicionado aqui
+          ocp_numero: formData.ocp_numero.trim() || null, // Adicionado aqui
         })
         .eq("id", editingId);
 
@@ -209,7 +232,7 @@ export default function CertificadosPage() {
                     <td className="py-4 text-slate-600">{cert.nome_familia}</td>
                     <td className="py-4 text-slate-500 font-mono">{cert.numero_registro}</td>
                     <td className="py-4 text-slate-500">
-                      {new Date(cert.data_validade).toLocaleDateString("pt-BR")}
+                      {formatarDataSemOffset(cert.data_validade)}
                     </td>
                     <td className="py-4">
                       <span
@@ -361,6 +384,29 @@ export default function CertificadosPage() {
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Dropdown Inteligente de OCPs Padronizadas do Inmetro */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Organismo de Certificação (OCP do Selo) *
+                </label>
+                <select
+                  required
+                  value={`${formData.ocp_nome}|${formData.ocp_numero}`}
+                  onChange={(e) => {
+                    const [nome, numero] = e.target.value.split("|");
+                    setFormData({ ...formData, ocp_nome: nome, ocp_numero: numero });
+                  }}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:border-blue-500 outline-none"
+                >
+                  <option value="brics|0098">BRICS (OCP 0098)</option>
+                  <option value="sgs|0040">SGS (OCP 0040)</option>
+                  <option value="falcao bauer|0003">FALCÃO BAUER (OCP 0003)</option>
+                  <option value="tuv r.|0004">TÜV RHEINLAND (OCP 0004)</option>
+                  <option value="ul|0110">UL TESTTECH (OCP 0110)</option>
+                  <option value="iqb|0006">IQB (OCP 0006)</option>
+                </select>
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">

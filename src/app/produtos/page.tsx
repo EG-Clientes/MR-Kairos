@@ -21,6 +21,9 @@ interface Produto {
   fty_no: string;
   descricao: string;
   ean_13: string | null;
+  ean_barras: string | null;
+  data_fabricacao: string | null; // Adicionado aqui
+  lote: string | null;            // Adicionado aqui
   usa_pilha: boolean;
   contem_ima: boolean;
   partes_pequenas: boolean;
@@ -72,6 +75,9 @@ export default function ProdutosPage() {
     fty_no: "",
     descricao: "",
     ean_13: "",
+    ean_barras: "",
+    data_fabricacao: `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`, // Formato padrão MM/AAAA
+    lote: `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`,            // Formato padrão MM/AAAA
     usa_pilha: false,
     contem_ima: false,
     partes_pequenas: false,
@@ -83,25 +89,28 @@ export default function ProdutosPage() {
   async function carregarDados() {
     setLoading(true);
 
-    const { data: prodData, error: prodError } = await supabase
-      .from("produtos")
-      .select("*, empresas(razao_social), inmetro_familias(nome_familia)")
-      .order("created_at");
+    // Carrega produtos, empresas e famílias de certificação em paralelo
+    const [prodResult, empResult, famResult] = await Promise.all([
+      supabase
+        .from("produtos")
+        .select("*, empresas(razao_social), inmetro_familias(nome_familia)")
+        .order("created_at"),
+      supabase
+        .from("empresas")
+        .select("id, razao_social")
+        .order("razao_social"),
+      supabase
+        .from("inmetro_familias")
+        .select("id, empresa_id, nome_familia")
+        .order("nome_familia")
+    ]);
 
-    const { data: empData, error: empError } = await supabase
-      .from("empresas")
-      .select("id, razao_social")
-      .order("razao_social");
-
-    const { data: famData, error: famError } = await supabase
-      .from("inmetro_familias")
-      .select("id, empresa_id, nome_familia")
-      .order("nome_familia");
+    const { data: prodData, error: prodError } = prodResult;
+    const { data: empData, error: empError } = empResult;
+    const { data: famData, error: famError } = famResult;
 
     if (!prodError && prodData) setProdutos(prodData as any);
-    if (!empError && empData) {
-      setEmpresas(empData);
-    }
+    if (!empError && empData) setEmpresas(empData);
     if (!famError && famData) setFamilias(famData);
 
     setLoading(false);
@@ -116,26 +125,37 @@ export default function ProdutosPage() {
     (f) => f.empresa_id === formData.empresa_id
   );
 
-  // Monitora mudança de empresa para setar a primeira família disponível
+  // Monitora mudança de empresa para setar a primeira família disponível e evitar vazamento multi-tenant
   useEffect(() => {
-    if (!editingId) {
-      if (familiasFiltradas.length > 0) {
-        setFormData((prev) => ({ ...prev, familia_id: familiasFiltradas[0].id }));
+    // 1. Filtra as famílias locais pertinentes à empresa selecionada internamente no efeito
+    const filtradas = familias.filter((f) => f.empresa_id === formData.empresa_id);
+
+    // 2. Verifica se a família selecionada atualmente está dentro desta lista filtrada
+    const familiaPertenceAEmpresa = filtradas.some((f) => f.id === formData.familia_id);
+
+    // 3. Se não pertencer (ou se a empresa mudou), redireciona o vínculo de forma segura
+    if (!familiaPertenceAEmpresa) {
+      if (filtradas.length > 0) {
+        setFormData((prev) => ({ ...prev, familia_id: filtradas[0].id }));
       } else {
         setFormData((prev) => ({ ...prev, familia_id: "" }));
       }
     }
-  }, [formData.empresa_id, familias, editingId]);
+  }, [formData.empresa_id, familias]); // Apenas empresa_id e a lista bruta de familias controlam o ciclo de disparo
 
   // Modo de cadastro limpo
   function handleNovo() {
     setEditingId(null);
+    const dataAtualString = `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`;
     setFormData({
       empresa_id: empresas[0]?.id || "",
       familia_id: "",
       fty_no: "",
       descricao: "",
       ean_13: "",
+      ean_barras: "",
+      data_fabricacao: dataAtualString, // Inicializa com a data sugerida
+      lote: dataAtualString,            // Inicializa com o lote sugerido
       usa_pilha: false,
       contem_ima: false,
       partes_pequenas: false,
@@ -156,6 +176,9 @@ export default function ProdutosPage() {
       fty_no: prod.fty_no,
       descricao: prod.descricao,
       ean_13: prod.ean_13 || "",
+      ean_barras: prod.ean_barras || "",
+      data_fabricacao: prod.data_fabricacao || "", // Resgata o valor salvo
+      lote: prod.lote || "",                       // Resgata o valor salvo
       usa_pilha: prod.usa_pilha,
       contem_ima: prod.contem_ima,
       partes_pequenas: prod.partes_pequenas,
@@ -209,6 +232,9 @@ export default function ProdutosPage() {
           fty_no: formData.fty_no,
           descricao: formData.descricao,
           ean_13: eanFinal || null,
+          ean_barras: formData.ean_barras.trim() || null,
+          data_fabricacao: formData.data_fabricacao.trim() || null, // Adicionado aqui
+          lote: formData.lote.trim() || null,                       // Adicionado aqui
           usa_pilha: formData.usa_pilha,
           contem_ima: formData.contem_ima,
           partes_pequenas: formData.partes_pequenas,
@@ -235,6 +261,9 @@ export default function ProdutosPage() {
           fty_no: formData.fty_no,
           descricao: formData.descricao,
           ean_13: eanFinal,
+          ean_barras: formData.ean_barras.trim() || null,
+          data_fabricacao: formData.data_fabricacao.trim() || null, // Adicionado aqui
+          lote: formData.lote.trim() || null,                       // Adicionado aqui
           usa_pilha: formData.usa_pilha,
           contem_ima: formData.contem_ima,
           partes_pequenas: formData.partes_pequenas,
@@ -431,30 +460,45 @@ export default function ProdutosPage() {
                 </div>
               </div>
 
+              {/* Código do Fornecedor em destaque em linha inteira */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Código do Fornecedor (FTY NO) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.fty_no}
+                  onChange={(e) => setFormData({ ...formData, fty_no: e.target.value })}
+                  placeholder="Ex: 3117"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              {/* Códigos de barras pareados em 2 colunas com placeholders limpos e padronizados */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Código Fornecedor (FTY NO) *
+                    Código de Barras (Brasil)
                   </label>
                   <input
                     type="text"
-                    required
-                    value={formData.fty_no}
-                    onChange={(e) => setFormData({ ...formData, fty_no: e.target.value })}
-                    placeholder="Ex: YS809A ou 3117"
+                    value={formData.ean_13}
+                    onChange={(e) => setFormData({ ...formData, ean_13: e.target.value })}
+                    placeholder="automático"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Código de Barras (EAN-13)
+                    Código de Barras (Exterior)
                   </label>
                   <input
                     type="text"
-                    value={formData.ean_13}
-                    onChange={(e) => setFormData({ ...formData, ean_13: e.target.value })}
-                    placeholder="Deixe vazio para gerar automático"
+                    value={formData.ean_barras}
+                    onChange={(e) => setFormData({ ...formData, ean_barras: e.target.value })}
+                    placeholder="pode ficar vazio"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
                   />
                 </div>
@@ -474,7 +518,7 @@ export default function ProdutosPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                     Faixa Etária Indicada
@@ -483,7 +527,33 @@ export default function ProdutosPage() {
                     type="text"
                     value={formData.idade_minima || ""}
                     onChange={(e) => setFormData({ ...formData, idade_minima: e.target.value })}
-                    placeholder="Ex: Maiores de 3 anos, +12 meses"
+                    placeholder="Ex: +3 anos"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Data de Fabricação
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.data_fabricacao}
+                    onChange={(e) => setFormData({ ...formData, data_fabricacao: e.target.value })}
+                    placeholder="Ex: 08/2026"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Lote de Importação
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.lote}
+                    onChange={(e) => setFormData({ ...formData, lote: e.target.value })}
+                    placeholder="Ex: 08/2026"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
                   />
                 </div>

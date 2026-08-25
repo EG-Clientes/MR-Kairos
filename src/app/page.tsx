@@ -9,28 +9,29 @@ export default async function Home() {
   limiteVencimento.setDate(hoje.getDate() + 30); // Soma 30 dias
   const limiteString = limiteVencimento.toISOString().split("T")[0];
 
-  // 2. CONSULTAS AO VIVO NO SUPABASE
+  // 2. CONSULTAS EM PARALELO AO SUPABASE (Otimização para evitar cascata/delay de rede)
+  const [empresaResult, certificadoResult, produtoResult] = await Promise.all([
+    supabase
+      .from("empresas")
+      .select("razao_social, cnpj")
+      .order("razao_social"),
+    
+    supabase
+      .from("inmetro_familias")
+      .select("*", { count: "exact", head: true })
+      .lte("data_validade", limiteString), // Correção de Compliance: Busca tanto os já vencidos quanto os que estão para vencer em 30 dias
+    
+    supabase
+      .from("produtos")
+      .select("*", { count: "exact", head: true })
+  ]);
 
-  // Busca as empresas cadastradas
-  const { data: empresas, error: empError } = await supabase
-    .from("empresas")
-    .select("razao_social, cnpj")
-    .order("razao_social");
-
-  // Conta quantos Certificados vencem nos próximos 30 dias (Alerta)
-  const { count: certificadosVencendo, error: certError } = await supabase
-    .from("inmetro_familias")
-    .select("*", { count: "exact", head: true })
-    .lte("data_validade", limiteString)
-    .gte("data_validade", hojeString);
-
-  // Conta o total de Produtos cadastrados no sistema
-  const { count: totalProdutos, error: prodError } = await supabase
-    .from("produtos")
-    .select("*", { count: "exact", head: true });
+  const { data: empresas, error: empError } = empresaResult;
+  const { count: certificadosVencendo, error: certError } = certificadoResult;
+  const { count: totalProdutos, error: prodError } = produtoResult;
 
   if (empError || certError || prodError) {
-    console.error("Erro ao carregar métricas do dashboard");
+    console.error("Erro ao carregar métricas do dashboard:", { empError, certError, prodError });
   }
 
   return (
@@ -64,7 +65,7 @@ export default async function Home() {
         {/* Card 2: Alerta de Certificados (Calculado nos últimos 30 dias) */}
         <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Certificados Vencendo (30 dias)</p>
+            <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Certificados Vencidos ou Próximos do Vencimento</p>
             <h3 className={`text-3xl font-bold mt-1 ${certificadosVencendo && certificadosVencendo > 0 ? "text-red-600 animate-pulse" : "text-slate-800"}`}>
               {certificadosVencendo || 0}
             </h3>
