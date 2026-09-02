@@ -1,5 +1,9 @@
 import { supabase } from "@/lib/supabase";
 
+// Força a Vercel a nunca cachear e sempre buscar dados em tempo real no Supabase
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function Home() {
   // 1. Calcula a faixa de data dos próximos 30 dias para o alerta do Inmetro
   const hoje = new Date();
