@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import ModalAviso from "@/components/ModalAviso";
 // Helper para formatar data YYYY-MM-DD para DD/MM/YYYY sem sofrer desvios de fuso horário (timezone offset)
 function formatarDataSemOffset(dataString: string | null | undefined): string {
   if (!dataString) return "";
@@ -64,6 +65,15 @@ export default function CertificadosPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null); // Guarda o ID se for edição
   const [error, setError] = useState<string | null>(null);
+
+  // Estado do Modal Bonitão
+  const [modalAviso, setModalAviso] = useState<{
+    isOpen: boolean;
+    tipo?: "perigo" | "alerta" | "sucesso" | "info";
+    titulo: string;
+    mensagem: string;
+    onConfirmar?: () => void;
+  }>({ isOpen: false, titulo: "", mensagem: "" });
 
   // Estado do formulário
   const [formData, setFormData] = useState({
@@ -141,24 +151,32 @@ export default function CertificadosPage() {
     setIsModalOpen(true);
   }
 
-  // Função para deletar certificado
-  async function handleExcluir(id: string, nome_familia: string) {
-    const confirmar = confirm(
-      `Deseja mesmo excluir o certificado da família "${nome_familia}"?\n\nOs produtos vinculados a esse certificado passarão a constar como 'Sem Registro'.`
-    );
+  // Função para deletar certificado com Card Elegante
+  function handleExcluir(id: string, nome_familia: string) {
+    setModalAviso({
+      isOpen: true,
+      tipo: "perigo",
+      titulo: "Excluir Certificado",
+      mensagem: `Deseja mesmo excluir o certificado da família "${nome_familia}"?\n\nOs produtos vinculados a esse certificado passarão a constar como 'Sem Registro'.`,
+      onConfirmar: async () => {
+        setModalAviso((prev) => ({ ...prev, isOpen: false }));
+        const { error: deleteError } = await supabase
+          .from("inmetro_familias")
+          .delete()
+          .eq("id", id);
 
-    if (!confirmar) return;
-
-    const { error: deleteError } = await supabase
-      .from("inmetro_familias")
-      .delete()
-      .eq("id", id);
-
-    if (deleteError) {
-      alert("Erro ao excluir certificado.");
-    } else {
-      await carregarDados(); // Atualiza a lista na tela
-    }
+        if (deleteError) {
+          setModalAviso({
+            isOpen: true,
+            tipo: "alerta",
+            titulo: "Erro ao Excluir",
+            mensagem: "Não foi possível excluir o certificado. Verifique os vínculos.",
+          });
+        } else {
+          await carregarDados();
+        }
+      },
+    });
   }
 
   // Salvar ou Atualizar
@@ -463,6 +481,18 @@ export default function CertificadosPage() {
           </div>
         </div>
       )}
+
+      {/* CARD ELEGANTE DE CONFIRMAÇÃO / AVISO */}
+      <ModalAviso
+        isOpen={modalAviso.isOpen}
+        tipo={modalAviso.tipo}
+        titulo={modalAviso.titulo}
+        mensagem={modalAviso.mensagem}
+        textoConfirmar="Sim, Excluir"
+        textoCancelar="Cancelar"
+        onConfirmar={modalAviso.onConfirmar}
+        onCancelar={() => setModalAviso((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

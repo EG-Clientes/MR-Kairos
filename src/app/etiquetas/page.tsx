@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import JsBarcode from "jsbarcode";
+import ModalAviso from "@/components/ModalAviso";
 
 interface Produto {
   id: string;
@@ -39,6 +40,14 @@ export default function GeradorEtiquetasPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Estado do Modal Bonitão
+  const [modalAviso, setModalAviso] = useState<{
+    isOpen: boolean;
+    tipo?: "perigo" | "alerta" | "sucesso" | "info";
+    titulo: string;
+    mensagem: string;
+  }>({ isOpen: false, titulo: "", mensagem: "" });
   
   // Referência para o elemento SVG do código de barras
   const barcodeRef = useRef<SVGSVGElement>(null);
@@ -378,6 +387,15 @@ export default function GeradorEtiquetasPage() {
           )}
         </div>
       </div>
+
+      {/* CARD ELEGANTE DE AVISOS / ALERTAS */}
+      <ModalAviso
+        isOpen={modalAviso.isOpen}
+        tipo={modalAviso.tipo}
+        titulo={modalAviso.titulo}
+        mensagem={modalAviso.mensagem}
+        onCancelar={() => setModalAviso((prev) => ({ ...prev, isOpen: false }))}
+      />
 
       {/* ESTILO CSS DE IMPRESSÃO INJETADO NATIVAMENTE (BURLA COMPILADORES E NAVEGADORES) */}
       <style dangerouslySetInnerHTML={{ __html: `

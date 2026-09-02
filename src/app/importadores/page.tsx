@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import ModalAviso from "@/components/ModalAviso";
 
 interface Empresa {
   id: string;
@@ -20,6 +21,15 @@ export default function ImportadoresPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null); // Guarda o ID se for edição
   const [error, setError] = useState<string | null>(null);
+
+  // Estado do Modal Bonitão
+  const [modalAviso, setModalAviso] = useState<{
+    isOpen: boolean;
+    tipo?: "perigo" | "alerta" | "sucesso" | "info";
+    titulo: string;
+    mensagem: string;
+    onConfirmar?: () => void;
+  }>({ isOpen: false, titulo: "", mensagem: "" });
 
   // Estado do formulário
   const [formData, setFormData] = useState({
@@ -81,24 +91,32 @@ export default function ImportadoresPage() {
     setIsModalOpen(true);
   }
 
-  // Função para deletar importador
-  async function handleExcluir(id: string, nome: string) {
-    const confirmar = confirm(
-      `ATENÇÃO:\nDeseja mesmo excluir o importador "${nome}"?\n\nIsso apagará permanentemente todos os produtos e certificados vinculados a ele!`
-    );
+  // Função para deletar importador com Card Elegante
+  function handleExcluir(id: string, nome: string) {
+    setModalAviso({
+      isOpen: true,
+      tipo: "perigo",
+      titulo: "Excluir Importador",
+      mensagem: `Deseja mesmo excluir o importador "${nome}"?\n\nIsso apagará permanentemente todos os produtos e certificados vinculados a ele!`,
+      onConfirmar: async () => {
+        setModalAviso((prev) => ({ ...prev, isOpen: false }));
+        const { error: deleteError } = await supabase
+          .from("empresas")
+          .delete()
+          .eq("id", id);
 
-    if (!confirmar) return;
-
-    const { error: deleteError } = await supabase
-      .from("empresas")
-      .delete()
-      .eq("id", id);
-
-    if (deleteError) {
-      alert("Erro ao excluir importador. Verifique as dependências.");
-    } else {
-      await buscarEmpresas(); // Atualiza a lista na tela
-    }
+        if (deleteError) {
+          setModalAviso({
+            isOpen: true,
+            tipo: "alerta",
+            titulo: "Erro ao Excluir",
+            mensagem: "Não foi possível excluir o importador. Verifique as dependências.",
+          });
+        } else {
+          await buscarEmpresas();
+        }
+      },
+    });
   }
 
   // Salvar ou Atualizar com suporte a Upload de Arquivo do Computador
@@ -404,6 +422,18 @@ export default function ImportadoresPage() {
           </div>
         </div>
       )}
+
+      {/* CARD ELEGANTE DE CONFIRMAÇÃO / AVISO */}
+      <ModalAviso
+        isOpen={modalAviso.isOpen}
+        tipo={modalAviso.tipo}
+        titulo={modalAviso.titulo}
+        mensagem={modalAviso.mensagem}
+        textoConfirmar="Sim, Excluir"
+        textoCancelar="Cancelar"
+        onConfirmar={modalAviso.onConfirmar}
+        onCancelar={() => setModalAviso((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

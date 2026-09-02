@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import ModalAviso from "@/components/ModalAviso";
 
 interface Empresa {
   id: string;
@@ -67,6 +68,15 @@ export default function ProdutosPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null); // ID se for edição
   const [error, setError] = useState<string | null>(null);
+
+  // Estado do Modal Bonitão
+  const [modalAviso, setModalAviso] = useState<{
+    isOpen: boolean;
+    tipo?: "perigo" | "alerta" | "sucesso" | "info";
+    titulo: string;
+    mensagem: string;
+    onConfirmar?: () => void;
+  }>({ isOpen: false, titulo: "", mensagem: "" });
 
   // Estado do formulário
   const [formData, setFormData] = useState({
@@ -190,24 +200,32 @@ export default function ProdutosPage() {
     setIsModalOpen(true);
   }
 
-  // Deletar Produto
-  async function handleExcluir(id: string, fty_no: string) {
-    const confirmar = confirm(
-      `Deseja mesmo excluir o produto "${fty_no}" do catálogo?`
-    );
+  // Deletar Produto com Card Elegante
+  function handleExcluir(id: string, fty_no: string) {
+    setModalAviso({
+      isOpen: true,
+      tipo: "perigo",
+      titulo: "Excluir Produto",
+      mensagem: `Deseja mesmo excluir o produto "${fty_no}" do catálogo base?`,
+      onConfirmar: async () => {
+        setModalAviso((prev) => ({ ...prev, isOpen: false }));
+        const { error: deleteError } = await supabase
+          .from("produtos")
+          .delete()
+          .eq("id", id);
 
-    if (!confirmar) return;
-
-    const { error: deleteError } = await supabase
-      .from("produtos")
-      .delete()
-      .eq("id", id);
-
-    if (deleteError) {
-      alert("Erro ao excluir produto.");
-    } else {
-      await carregarDados();
-    }
+        if (deleteError) {
+          setModalAviso({
+            isOpen: true,
+            tipo: "alerta",
+            titulo: "Erro ao Excluir",
+            mensagem: "Não foi possível excluir o produto. Verifique as dependências.",
+          });
+        } else {
+          await carregarDados();
+        }
+      },
+    });
   }
 
   // Salvar ou Atualizar
@@ -651,6 +669,18 @@ export default function ProdutosPage() {
           </div>
         </div>
       )}
+
+      {/* CARD ELEGANTE DE CONFIRMAÇÃO / AVISO */}
+      <ModalAviso
+        isOpen={modalAviso.isOpen}
+        tipo={modalAviso.tipo}
+        titulo={modalAviso.titulo}
+        mensagem={modalAviso.mensagem}
+        textoConfirmar="Sim, Excluir"
+        textoCancelar="Cancelar"
+        onConfirmar={modalAviso.onConfirmar}
+        onCancelar={() => setModalAviso((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
