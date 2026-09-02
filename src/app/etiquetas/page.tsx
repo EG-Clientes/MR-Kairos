@@ -144,7 +144,7 @@ export default function GeradorEtiquetasPage() {
       {/* Cabeçalho de Controle - Ocultado na Impressão */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/60 print:hidden">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Estúdio de Rotulagem</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Etiquetas</h1>
           <p className="text-slate-500 text-sm mt-1">
             Selecione o item para pré-visualizar a etiqueta térmica de compliance em 10x15cm.
           </p>

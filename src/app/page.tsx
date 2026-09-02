@@ -39,7 +39,7 @@ export default async function Home() {
       {/* Cabeçalho da Página */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/60">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Dashboard de Compliance</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Dashboard</h1>
           <p className="text-slate-500 text-sm mt-1">Visão geral em tempo real de importadores, certificados e rotulagem.</p>
         </div>
         <div className="flex items-center space-x-2 bg-emerald-50 border border-emerald-200/80 px-3.5 py-1.5 rounded-full shadow-sm w-fit">
@@ -55,7 +55,7 @@ export default async function Home() {
           <div className="space-y-1">
             <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Importadores Ativos</p>
             <h3 className="text-3xl font-extrabold text-slate-800 tracking-tight">{empresas?.length || 0}</h3>
-            <p className="text-[11px] text-slate-400 font-medium">Empresas cadastradas no SaaS</p>
+            <p className="text-[11px] text-slate-400 font-medium">Empresas cadastradas</p>
           </div>
           <div className="p-3.5 bg-blue-50 text-blue-600 rounded-xl group-hover:scale-105 transition-transform duration-200 border border-blue-100/80">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
