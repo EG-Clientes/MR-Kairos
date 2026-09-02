@@ -198,74 +198,76 @@ export default function ImportadoresPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-7xl mx-auto">
       {/* Cabeçalho */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/60">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Importadores</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Importadores</h1>
           <p className="text-slate-500 text-sm mt-1">
-            Cadastre e gerencie as empresas importadoras clientes da Kairós.
+            Cadastre e gerencie as empresas importadoras ativas no sistema.
           </p>
         </div>
         <button
           onClick={handleNovo}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-4 py-2.5 rounded-lg shadow-sm transition flex items-center space-x-2"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 self-start sm:self-auto"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
           </svg>
           <span>Novo Importador</span>
         </button>
       </div>
 
-      {/* Lista / Tabela */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+      {/* Tabela de Empresas */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] overflow-hidden">
         {loading ? (
-          <div className="text-center py-12 text-slate-500">
+          <div className="text-center py-16 text-slate-500">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            Carregando importadores...
+            Carregando empresas...
           </div>
         ) : empresas.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100">
-              <thead>
-                <tr className="text-left text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="pb-3">Logo</th>
-                  <th className="pb-3">Razão Social</th>
-                  <th className="pb-3">CNPJ</th>
-                  <th className="pb-3">E-mail SAC</th>
-                  <th className="pb-3 text-right">Ações</th>
+              <thead className="bg-slate-50/50">
+                <tr className="text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-3.5 px-6">Logo</th>
+                  <th className="py-3.5 px-6">Razão Social</th>
+                  <th className="py-3.5 px-6">CNPJ</th>
+                  <th className="py-3.5 px-6">E-mail SAC</th>
+                  <th className="py-3.5 px-6 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {empresas.map((empresa) => (
-                  <tr key={empresa.id} className="hover:bg-slate-50/30">
-                    <td className="py-4">
+                  <tr key={empresa.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-4 px-6">
                       {empresa.logo_url ? (
-                        <img
-                          src={empresa.logo_url}
-                          alt="Logo"
-                          className="w-8 h-8 rounded-full object-cover border border-slate-100 bg-white"
-                        />
+                        <div className="w-10 h-10 rounded-xl border border-slate-200 bg-white p-1 flex items-center justify-center shadow-xs">
+                          <img
+                            src={empresa.logo_url}
+                            alt="Logo"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </div>
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs uppercase">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center font-bold text-xs uppercase shadow-xs">
                           {empresa.razao_social.substring(0, 2)}
                         </div>
                       )}
                     </td>
-                    <td className="py-4 font-semibold text-slate-700">{empresa.razao_social}</td>
-                    <td className="py-4 text-slate-500">{empresa.cnpj}</td>
-                    <td className="py-4 text-slate-500">{empresa.sac_email || "Não informado"}</td>
-                    <td className="py-4 text-right space-x-3">
+                    <td className="py-4 px-6 font-semibold text-slate-800">{empresa.razao_social}</td>
+                    <td className="py-4 px-6 text-slate-500 font-mono text-xs">{empresa.cnpj}</td>
+                    <td className="py-4 px-6 text-slate-500 text-xs">{empresa.sac_email || "Não informado"}</td>
+                    <td className="py-4 px-6 text-right space-x-2">
                       <button
                         onClick={() => handleEditar(empresa)}
-                        className="text-blue-600 hover:text-blue-800 font-semibold text-xs"
+                        className="text-blue-600 hover:text-blue-800 font-semibold text-xs bg-blue-50 hover:bg-blue-100/70 border border-blue-100 px-3 py-1.5 rounded-lg transition"
                       >
                         Editar
                       </button>
                       <button
                         onClick={() => handleExcluir(empresa.id, empresa.razao_social)}
-                        className="text-red-500 hover:text-red-700 font-semibold text-xs"
+                        className="text-red-500 hover:text-red-700 font-semibold text-xs bg-red-50 hover:bg-red-100/70 border border-red-100 px-3 py-1.5 rounded-lg transition"
                       >
                         Excluir
                       </button>
@@ -276,7 +278,7 @@ export default function ImportadoresPage() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-12 text-slate-500 italic">
+          <div className="text-center py-16 text-slate-400 text-sm">
             Nenhum importador cadastrado. Clique no botão acima para adicionar.
           </div>
         )}
@@ -284,17 +286,20 @@ export default function ImportadoresPage() {
 
       {/* MODAL DE CADASTRO/EDIÇÃO */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-100 max-w-lg w-full p-6 space-y-6">
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-lg w-full p-6 space-y-6 animate-in fade-in zoom-in duration-150">
             <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-              <h3 className="text-lg font-bold text-slate-800">
-                {editingId ? "Editar Importador" : "Novo Importador"}
-              </h3>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  {editingId ? "Editar Importador" : "Novo Importador"}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">Preencha as informações cadastrais da empresa.</p>
+              </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 transition"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-50 transition"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -302,11 +307,11 @@ export default function ImportadoresPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div className="p-3 bg-red-50 text-red-700 text-xs rounded-lg font-medium">{error}</div>
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium">{error}</div>
               )}
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                   Razão Social *
                 </label>
                 <input
@@ -315,13 +320,13 @@ export default function ImportadoresPage() {
                   value={formData.razao_social}
                   onChange={(e) => setFormData({ ...formData, razao_social: e.target.value })}
                   placeholder="Ex: STONE IMPORT LTDA"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     CNPJ *
                   </label>
                   <input
@@ -330,12 +335,12 @@ export default function ImportadoresPage() {
                     value={formData.cnpj}
                     onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
                     placeholder="Ex: 00.000.000/0001-00"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     E-mail SAC
                   </label>
                   <input
@@ -343,13 +348,13 @@ export default function ImportadoresPage() {
                     value={formData.sac_email}
                     onChange={(e) => setFormData({ ...formData, sac_email: e.target.value })}
                     placeholder="Ex: sac@empresa.com.br"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                   Endereço Completo
                 </label>
                 <input
@@ -357,12 +362,12 @@ export default function ImportadoresPage() {
                   value={formData.endereco}
                   onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
                   placeholder="Rua, Número, Bairro, Cidade - Estado"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                   Logomarca da Empresa (PNG / JPG)
                 </label>
                 <input
@@ -372,10 +377,10 @@ export default function ImportadoresPage() {
                     const file = e.target.files?.[0];
                     if (file) setLogoFile(file);
                   }}
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white file:mr-3 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 outline-none cursor-pointer"
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm bg-white file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 outline-none cursor-pointer"
                 />
                 {formData.logo_url && !logoFile && (
-                  <p className="text-[10px] text-slate-400 mt-1">Logo atual preservada. Escolha outro arquivo apenas se desejar alterá-la.</p>
+                  <p className="text-[10px] text-slate-400 mt-1.5 font-medium">Logo atual preservada no servidor. Escolha outro arquivo apenas se desejar alterá-la.</p>
                 )}
               </div>
 
@@ -383,14 +388,14 @@ export default function ImportadoresPage() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-500 hover:bg-slate-50"
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm disabled:opacity-50"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm hover:shadow transition disabled:opacity-50"
                 >
                   {saving ? "Salvando..." : "Salvar"}
                 </button>

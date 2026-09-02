@@ -289,101 +289,109 @@ export default function ProdutosPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-7xl mx-auto">
       {/* Cabeçalho */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/60">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Produtos</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Catálogo de Produtos</h1>
           <p className="text-slate-500 text-sm mt-1">
-            Gerencie o catálogo de produtos de cada importador e configure os alertas de rotulagem.
+            Gerencie itens importados, códigos de barras e regras de rotulagem.
           </p>
         </div>
         <button
           onClick={handleNovo}
           disabled={empresas.length === 0}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-4 py-2.5 rounded-lg shadow-sm transition flex items-center space-x-2 disabled:opacity-50"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 disabled:opacity-50 self-start sm:self-auto"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
           </svg>
           <span>Novo Produto</span>
         </button>
       </div>
 
-      {/* Lista de Produtos */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+      {/* Tabela de Produtos */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] overflow-hidden">
         {loading ? (
-          <div className="text-center py-12 text-slate-500">
+          <div className="text-center py-16 text-slate-500">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
             Carregando produtos...
           </div>
         ) : produtos.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100">
-              <thead>
-                <tr className="text-left text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="pb-3">Importador</th>
-                  <th className="pb-3">Código (FTY NO)</th>
-                  <th className="pb-3">EAN-13</th>
-                  <th className="pb-3">Descrição</th>
-                  <th className="pb-3">Inmetro Vinc.</th>
-                  <th className="pb-3">Sinalizadores (Avisos)</th>
-                  <th className="pb-3 text-right">Ações</th>
+              <thead className="bg-slate-50/50">
+                <tr className="text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-3.5 px-6">Importador</th>
+                  <th className="py-3.5 px-6">Código (FTY NO)</th>
+                  <th className="py-3.5 px-6">EAN-13</th>
+                  <th className="py-3.5 px-6">Descrição Comercial</th>
+                  <th className="py-3.5 px-6">Família Inmetro</th>
+                  <th className="py-3.5 px-6">Sinalizadores Legais</th>
+                  <th className="py-3.5 px-6 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {produtos.map((prod) => (
-                  <tr key={prod.id} className="hover:bg-slate-50/30">
-                    <td className="py-4 font-semibold text-slate-700">
+                  <tr key={prod.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-4 px-6 font-semibold text-slate-800">
                       {prod.empresas?.razao_social || "Não vinculado"}
                     </td>
-                    <td className="py-4 font-mono text-blue-600">{prod.fty_no}</td>
-                    <td className="py-4 font-mono text-slate-500 text-xs">{prod.ean_13 || "Sem EAN"}</td>
-                    <td className="py-4 text-slate-600">{prod.descricao}</td>
-                    <td className="py-4 text-slate-500">
-                      {prod.inmetro_familias?.nome_familia || (
-                        <span className="text-amber-500 text-xs font-medium">Sem Registro</span>
+                    <td className="py-4 px-6 font-mono text-xs font-bold text-blue-600">
+                      <span className="bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md">
+                        {prod.fty_no}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 font-mono text-slate-500 text-xs">{prod.ean_13 || "Sem EAN"}</td>
+                    <td className="py-4 px-6 text-slate-700 font-medium">{prod.descricao}</td>
+                    <td className="py-4 px-6 text-slate-500 text-xs">
+                      {prod.inmetro_familias?.nome_familia ? (
+                        <span className="font-medium text-slate-700">{prod.inmetro_familias.nome_familia}</span>
+                      ) : (
+                        <span className="text-amber-600 font-semibold bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-full text-[11px]">
+                          Sem Registro
+                        </span>
                       )}
                     </td>
-                    <td className="py-4">
-                      <div className="flex flex-wrap gap-1">
+                    <td className="py-4 px-6">
+                      <div className="flex flex-wrap gap-1 max-w-xs">
                         {prod.usa_pilha && (
-                          <span className="bg-purple-50 text-purple-700 border border-purple-100 text-[10px] font-semibold px-2 py-0.5 rounded">
+                          <span className="bg-purple-50 text-purple-700 border border-purple-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md">
                             Pilha
                           </span>
                         )}
                         {prod.contem_ima && (
-                          <span className="bg-red-50 text-red-700 border border-red-100 text-[10px] font-semibold px-2 py-0.5 rounded">
+                          <span className="bg-red-50 text-red-700 border border-red-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md">
                             Ímã
                           </span>
                         )}
                         {prod.partes_pequenas && (
-                          <span className="bg-orange-50 text-orange-700 border border-orange-100 text-[10px] font-semibold px-2 py-0.5 rounded">
-                            Peças Peq.
+                          <span className="bg-orange-50 text-orange-700 border border-orange-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                            Partes Peq.
                           </span>
                         )}
                         {prod.metal && (
-                          <span className="bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-semibold px-2 py-0.5 rounded">
+                          <span className="bg-blue-50 text-blue-700 border border-blue-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md">
                             Metal
                           </span>
                         )}
                         {prod.restritivo_0_3_anos && (
-                          <span className="bg-rose-50 text-rose-700 border border-rose-100 text-[10px] font-semibold px-2 py-0.5 rounded">
+                          <span className="bg-rose-50 text-rose-700 border border-rose-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md">
                             0-3 Anos
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="py-4 text-right space-x-3">
+                    <td className="py-4 px-6 text-right space-x-2 whitespace-nowrap">
                       <button
                         onClick={() => handleEditar(prod)}
-                        className="text-blue-600 hover:text-blue-800 font-semibold text-xs"
+                        className="text-blue-600 hover:text-blue-800 font-semibold text-xs bg-blue-50 hover:bg-blue-100/70 border border-blue-100 px-3 py-1.5 rounded-lg transition"
                       >
                         Editar
                       </button>
                       <button
                         onClick={() => handleExcluir(prod.id, prod.fty_no)}
-                        className="text-red-500 hover:text-red-700 font-semibold text-xs"
+                        className="text-red-500 hover:text-red-700 font-semibold text-xs bg-red-50 hover:bg-red-100/70 border border-red-100 px-3 py-1.5 rounded-lg transition"
                       >
                         Excluir
                       </button>
@@ -394,7 +402,7 @@ export default function ProdutosPage() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-12 text-slate-500 italic">
+          <div className="text-center py-16 text-slate-400 text-sm">
             Nenhum produto cadastrado até o momento.
           </div>
         )}
@@ -402,14 +410,17 @@ export default function ProdutosPage() {
 
       {/* MODAL DE CADASTRO / EDIÇÃO */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-100 max-w-lg w-full p-6 space-y-5 overflow-y-auto max-h-[90vh]">
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-lg w-full p-6 space-y-5 overflow-y-auto max-h-[90vh] animate-in fade-in zoom-in duration-150">
             <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-              <h3 className="text-lg font-bold text-slate-800">
-                {editingId ? "Editar Produto" : "Novo Produto"}
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  {editingId ? "Editar Produto" : "Novo Produto"}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">Cadastre o item com seus parâmetros de compliance.</p>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-50 transition">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -417,20 +428,20 @@ export default function ProdutosPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div className="p-3 bg-red-50 text-red-700 text-xs rounded-lg font-medium">{error}</div>
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium">{error}</div>
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Importador */}
+                {/* 1. Importador */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Importador *
                   </label>
                   <select
                     required
                     value={formData.empresa_id}
                     onChange={(e) => setFormData({ ...formData, empresa_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                   >
                     {empresas.map((emp) => (
                       <option key={emp.id} value={emp.id}>
@@ -440,15 +451,15 @@ export default function ProdutosPage() {
                   </select>
                 </div>
 
-                {/* Família Inmetro */}
+                {/* 2. Família Inmetro */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Família Inmetro Vinc.
                   </label>
                   <select
                     value={formData.familia_id}
                     onChange={(e) => setFormData({ ...formData, familia_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                   >
                     <option value="">Sem Registro (Opcional)</option>
                     {familiasFiltradas.map((fam) => (
@@ -460,9 +471,9 @@ export default function ProdutosPage() {
                 </div>
               </div>
 
-              {/* Código do Fornecedor em destaque em linha inteira */}
+              {/* 3. Código do Fornecedor */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                   Código do Fornecedor (FTY NO) *
                 </label>
                 <input
@@ -471,14 +482,14 @@ export default function ProdutosPage() {
                   value={formData.fty_no}
                   onChange={(e) => setFormData({ ...formData, fty_no: e.target.value })}
                   placeholder="Ex: 3117"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono font-semibold"
                 />
               </div>
 
-              {/* Códigos de barras pareados em 2 colunas com placeholders limpos e padronizados */}
+              {/* 4 e 5. Códigos de Barras Pareados */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Código de Barras (Brasil)
                   </label>
                   <input
@@ -486,12 +497,12 @@ export default function ProdutosPage() {
                     value={formData.ean_13}
                     onChange={(e) => setFormData({ ...formData, ean_13: e.target.value })}
                     placeholder="automático"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Código de Barras (Exterior)
                   </label>
                   <input
@@ -499,13 +510,14 @@ export default function ProdutosPage() {
                     value={formData.ean_barras}
                     onChange={(e) => setFormData({ ...formData, ean_barras: e.target.value })}
                     placeholder="pode ficar vazio"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono"
                   />
                 </div>
               </div>
 
+              {/* 6. Descrição */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                   Descrição Comercial do Produto *
                 </label>
                 <input
@@ -514,13 +526,14 @@ export default function ProdutosPage() {
                   value={formData.descricao}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                   placeholder="Ex: BONECA SEREIA COM LUZ"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-medium"
                 />
               </div>
 
+              {/* 7, 8 e 9. Faixa Etária, Data Fabricação e Lote */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Faixa Etária Indicada
                   </label>
                   <input
@@ -528,12 +541,12 @@ export default function ProdutosPage() {
                     value={formData.idade_minima || ""}
                     onChange={(e) => setFormData({ ...formData, idade_minima: e.target.value })}
                     placeholder="Ex: +3 anos"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Data de Fabricação
                   </label>
                   <input
@@ -541,12 +554,12 @@ export default function ProdutosPage() {
                     value={formData.data_fabricacao}
                     onChange={(e) => setFormData({ ...formData, data_fabricacao: e.target.value })}
                     placeholder="Ex: 08/2026"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Lote de Importação
                   </label>
                   <input
@@ -554,15 +567,15 @@ export default function ProdutosPage() {
                     value={formData.lote}
                     onChange={(e) => setFormData({ ...formData, lote: e.target.value })}
                     placeholder="Ex: 08/2026"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                   />
                 </div>
               </div>
 
-              {/* SINALIZADORES DE SEGURANÇA */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Sinalizadores de Segurança (Avisos Legais)
+              {/* 10. SINALIZADORES DE SEGURANÇA */}
+              <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-3">
+                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Sinalizadores de Segurança (Avisos Legais Obrigatórios)
                 </h4>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -571,9 +584,9 @@ export default function ProdutosPage() {
                       type="checkbox"
                       checked={formData.usa_pilha}
                       onChange={(e) => setFormData({ ...formData, usa_pilha: e.target.checked })}
-                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      className="rounded-md text-blue-600 focus:ring-blue-500 h-4 w-4"
                     />
-                    <span>Contém Pilha / Bateria</span>
+                    <span className="font-medium">Contém Pilha / Bateria</span>
                   </label>
 
                   <label className="flex items-center space-x-2.5 text-slate-700 text-sm cursor-pointer hover:text-slate-950">
@@ -581,9 +594,9 @@ export default function ProdutosPage() {
                       type="checkbox"
                       checked={formData.contem_ima}
                       onChange={(e) => setFormData({ ...formData, contem_ima: e.target.checked })}
-                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      className="rounded-md text-blue-600 focus:ring-blue-500 h-4 w-4"
                     />
-                    <span>Contém Ímã</span>
+                    <span className="font-medium">Contém Ímã</span>
                   </label>
 
                   <label className="flex items-center space-x-2.5 text-slate-700 text-sm cursor-pointer hover:text-slate-950">
@@ -591,9 +604,9 @@ export default function ProdutosPage() {
                       type="checkbox"
                       checked={formData.partes_pequenas}
                       onChange={(e) => setFormData({ ...formData, partes_pequenas: e.target.checked })}
-                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      className="rounded-md text-blue-600 focus:ring-blue-500 h-4 w-4"
                     />
-                    <span>Contém Partes Pequenas</span>
+                    <span className="font-medium">Contém Partes Pequenas</span>
                   </label>
 
                   <label className="flex items-center space-x-2.5 text-slate-700 text-sm cursor-pointer hover:text-slate-950">
@@ -601,19 +614,19 @@ export default function ProdutosPage() {
                       type="checkbox"
                       checked={formData.metal}
                       onChange={(e) => setFormData({ ...formData, metal: e.target.checked })}
-                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      className="rounded-md text-blue-600 focus:ring-blue-500 h-4 w-4"
                     />
-                    <span>Contém Fechos Metálicos</span>
+                    <span className="font-medium">Contém Fechos Metálicos</span>
                   </label>
 
-                  <label className="flex items-center space-x-2.5 text-slate-700 text-sm cursor-pointer hover:text-slate-950 col-span-1 sm:col-span-2 border-t border-slate-200/60 pt-2 mt-1">
+                  <label className="flex items-center space-x-2.5 text-slate-700 text-sm cursor-pointer hover:text-slate-950 col-span-1 sm:col-span-2 border-t border-slate-200/80 pt-2.5 mt-1">
                     <input
                       type="checkbox"
                       checked={formData.restritivo_0_3_anos}
                       onChange={(e) => setFormData({ ...formData, restritivo_0_3_anos: e.target.checked })}
-                      className="rounded text-rose-600 focus:ring-rose-500 h-4 w-4"
+                      className="rounded-md text-rose-600 focus:ring-rose-500 h-4 w-4"
                     />
-                    <span className="text-rose-700 font-medium">Restritivo para menores de 3 anos (Selo 0-3)</span>
+                    <span className="text-rose-700 font-semibold text-xs">Restritivo para menores de 3 anos (Selo 0-3 Obrigatório)</span>
                   </label>
                 </div>
               </div>
@@ -622,14 +635,14 @@ export default function ProdutosPage() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-500 hover:bg-slate-50"
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm disabled:opacity-50"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm hover:shadow transition disabled:opacity-50"
                 >
                   {saving ? "Salvando..." : "Salvar"}
                 </button>

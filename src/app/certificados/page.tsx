@@ -11,6 +11,33 @@ function formatarDataSemOffset(dataString: string | null | undefined): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+// Helper de Compliance: Calcula o status real com base na data de hoje
+function obterStatusDinamico(dataValidade: string | null | undefined, statusSalvo: string) {
+  if (statusSalvo === "Sem Registro") {
+    return { rotulo: "Sem Registro", classe: "bg-slate-100 text-slate-700" };
+  }
+  if (!dataValidade) {
+    return { rotulo: statusSalvo || "Sem Registro", classe: "bg-slate-100 text-slate-700" };
+  }
+
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  const partes = dataValidade.split("T")[0].split("-");
+  const dataVal = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
+
+  const diffTempo = dataVal.getTime() - hoje.getTime();
+  const diffDias = Math.ceil(diffTempo / (1000 * 60 * 60 * 24));
+
+  if (diffDias < 0) {
+    return { rotulo: "Vencido", classe: "bg-red-100 text-red-800" };
+  }
+  if (diffDias <= 30) {
+    return { rotulo: `Vence em ${diffDias}d`, classe: "bg-amber-100 text-amber-800" };
+  }
+  return { rotulo: "Ativo", classe: "bg-emerald-100 text-emerald-800" };
+}
+
 interface Empresa {
   id: string;
   razao_social: string;
@@ -182,21 +209,21 @@ export default function CertificadosPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-7xl mx-auto">
       {/* Cabeçalho */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/60">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Certificados Inmetro</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Certificados Inmetro</h1>
           <p className="text-slate-500 text-sm mt-1">
-            Gerencie as famílias de produtos certificadas de cada importador.
+            Gerencie as famílias certificadas e monitore os prazos de validade.
           </p>
         </div>
         <button
           onClick={handleNovo}
           disabled={empresas.length === 0}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-4 py-2.5 rounded-lg shadow-sm transition flex items-center space-x-2 disabled:opacity-50"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 disabled:opacity-50 self-start sm:self-auto"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
           </svg>
           <span>Novo Certificado</span>
@@ -204,59 +231,58 @@ export default function CertificadosPage() {
       </div>
 
       {/* Tabela de Certificados */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] overflow-hidden">
         {loading ? (
-          <div className="text-center py-12 text-slate-500">
+          <div className="text-center py-16 text-slate-500">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
             Carregando certificados...
           </div>
         ) : certificados.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100">
-              <thead>
-                <tr className="text-left text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="pb-3">Importador</th>
-                  <th className="pb-3">Família</th>
-                  <th className="pb-3">Nº Registro</th>
-                  <th className="pb-3">Validade</th>
-                  <th className="pb-3">Status</th>
-                  <th className="pb-3 text-right">Ações</th>
+              <thead className="bg-slate-50/50">
+                <tr className="text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-3.5 px-6">Importador</th>
+                  <th className="py-3.5 px-6">Família de Produtos</th>
+                  <th className="py-3.5 px-6">Nº do Registro</th>
+                  <th className="py-3.5 px-6">Validade</th>
+                  <th className="py-3.5 px-6">Status</th>
+                  <th className="py-3.5 px-6 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {certificados.map((cert) => (
-                  <tr key={cert.id} className="hover:bg-slate-50/30">
-                    <td className="py-4 font-semibold text-slate-700">
+                  <tr key={cert.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-4 px-6 font-semibold text-slate-800">
                       {cert.empresas?.razao_social || "Não vinculado"}
                     </td>
-                    <td className="py-4 text-slate-600">{cert.nome_familia}</td>
-                    <td className="py-4 text-slate-500 font-mono">{cert.numero_registro}</td>
-                    <td className="py-4 text-slate-500">
+                    <td className="py-4 px-6 text-slate-700 font-medium">{cert.nome_familia}</td>
+                    <td className="py-4 px-6 text-slate-600 font-mono text-xs">{cert.numero_registro}</td>
+                    <td className="py-4 px-6 text-slate-500 text-xs">
                       {formatarDataSemOffset(cert.data_validade)}
                     </td>
-                    <td className="py-4">
-                      <span
-                        className={`inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                          cert.status === "Ativo"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : cert.status === "Vencido"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {cert.status}
-                      </span>
+                    <td className="py-4 px-6">
+                      {(() => {
+                        const statusAtual = obterStatusDinamico(cert.data_validade, cert.status);
+                        return (
+                          <span
+                            className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full ${statusAtual.classe}`}
+                          >
+                            {statusAtual.rotulo}
+                          </span>
+                        );
+                      })()}
                     </td>
-                    <td className="py-4 text-right space-x-3">
+                    <td className="py-4 px-6 text-right space-x-2">
                       <button
                         onClick={() => handleEditar(cert)}
-                        className="text-blue-600 hover:text-blue-800 font-semibold text-xs"
+                        className="text-blue-600 hover:text-blue-800 font-semibold text-xs bg-blue-50 hover:bg-blue-100/70 border border-blue-100 px-3 py-1.5 rounded-lg transition"
                       >
                         Editar
                       </button>
                       <button
                         onClick={() => handleExcluir(cert.id, cert.nome_familia)}
-                        className="text-red-500 hover:text-red-700 font-semibold text-xs"
+                        className="text-red-500 hover:text-red-700 font-semibold text-xs bg-red-50 hover:bg-red-100/70 border border-red-100 px-3 py-1.5 rounded-lg transition"
                       >
                         Excluir
                       </button>
@@ -267,7 +293,7 @@ export default function CertificadosPage() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-12 text-slate-500 italic">
+          <div className="text-center py-16 text-slate-400 text-sm">
             Nenhum certificado cadastrado para nenhuma família.
           </div>
         )}
@@ -275,14 +301,17 @@ export default function CertificadosPage() {
 
       {/* MODAL DE CADASTRO / EDIÇÃO */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-100 max-w-lg w-full p-6 space-y-6">
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-lg w-full p-6 space-y-6 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-              <h3 className="text-lg font-bold text-slate-800">
-                {editingId ? "Editar Certificado" : "Novo Certificado"}
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  {editingId ? "Editar Certificado" : "Novo Certificado"}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">Vincule a família de produtos ao registro do Inmetro.</p>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-50 transition">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -290,19 +319,19 @@ export default function CertificadosPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div className="p-3 bg-red-50 text-red-700 text-xs rounded-lg font-medium">{error}</div>
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium">{error}</div>
               )}
 
-              {/* Dropdown de Importadores */}
+              {/* 1. Dropdown de Importadores */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                   Importador Dono do Certificado *
                 </label>
                 <select
                   required
                   value={formData.empresa_id}
                   onChange={(e) => setFormData({ ...formData, empresa_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:border-blue-500 outline-none"
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                 >
                   {empresas.map((emp) => (
                     <option key={emp.id} value={emp.id}>
@@ -312,8 +341,9 @@ export default function CertificadosPage() {
                 </select>
               </div>
 
+              {/* 2. Família */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                   Nome da Família de Produtos *
                 </label>
                 <input
@@ -322,13 +352,14 @@ export default function CertificadosPage() {
                   value={formData.nome_familia}
                   onChange={(e) => setFormData({ ...formData, nome_familia: e.target.value })}
                   placeholder="Ex: Bonecas de plástico"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 3. Nº do Registro */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Nº do Registro (Inmetro) *
                   </label>
                   <input
@@ -337,18 +368,19 @@ export default function CertificadosPage() {
                     value={formData.numero_registro}
                     onChange={(e) => setFormData({ ...formData, numero_registro: e.target.value })}
                     placeholder="Ex: 009870/2022"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono"
                   />
                 </div>
 
+                {/* 4. Status do Registro */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Status do Registro
                   </label>
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                   >
                     <option value="Ativo">Ativo</option>
                     <option value="Em Processo">Em Processo</option>
@@ -359,8 +391,9 @@ export default function CertificadosPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 5. Data de Emissão */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Data de Emissão *
                   </label>
                   <input
@@ -368,12 +401,13 @@ export default function CertificadosPage() {
                     required
                     value={formData.data_emissao}
                     onChange={(e) => setFormData({ ...formData, data_emissao: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                   />
                 </div>
 
+                {/* 6. Data de Validade */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Data de Validade *
                   </label>
                   <input
@@ -381,14 +415,14 @@ export default function CertificadosPage() {
                     required
                     value={formData.data_validade}
                     onChange={(e) => setFormData({ ...formData, data_validade: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:border-blue-500 outline-none"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                   />
                 </div>
               </div>
 
-              {/* Dropdown Inteligente de OCPs Padronizadas do Inmetro */}
+              {/* 7. Dropdown de OCPs Padronizadas do Inmetro */}
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                   Organismo de Certificação (OCP do Selo) *
                 </label>
                 <select
@@ -398,7 +432,7 @@ export default function CertificadosPage() {
                     const [nome, numero] = e.target.value.split("|");
                     setFormData({ ...formData, ocp_nome: nome, ocp_numero: numero });
                   }}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:border-blue-500 outline-none"
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                 >
                   <option value="brics|0098">BRICS (OCP 0098)</option>
                   <option value="sgs|0040">SGS (OCP 0040)</option>
@@ -413,14 +447,14 @@ export default function CertificadosPage() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-500 hover:bg-slate-50"
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm disabled:opacity-50"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm hover:shadow transition disabled:opacity-50"
                 >
                   {saving ? "Salvando..." : "Salvar"}
                 </button>
