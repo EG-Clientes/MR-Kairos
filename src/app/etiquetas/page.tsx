@@ -48,6 +48,7 @@ export default function GeradorEtiquetasPage() {
     tipo?: "perigo" | "alerta" | "sucesso" | "info";
     titulo: string;
     mensagem: string;
+    onConfirmar?: () => void;
   }>({ isOpen: false, titulo: "", mensagem: "" });
   
   // Referência para o elemento SVG do código de barras
@@ -427,6 +428,7 @@ export default function GeradorEtiquetasPage() {
         tipo={modalAviso.tipo}
         titulo={modalAviso.titulo}
         mensagem={modalAviso.mensagem}
+        onConfirmar={modalAviso.onConfirmar}
         onCancelar={() => setModalAviso((prev) => ({ ...prev, isOpen: false }))}
       />
 

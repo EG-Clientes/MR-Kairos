@@ -78,6 +78,7 @@ export default function LiquidificadorPage() {
     tipo?: "perigo" | "alerta" | "sucesso" | "info";
     titulo: string;
     mensagem: string;
+    onConfirmar?: () => void;
   }>({ isOpen: false, titulo: "", mensagem: "" });
 
 
@@ -838,6 +839,7 @@ export default function LiquidificadorPage() {
         tipo={modalAviso.tipo}
         titulo={modalAviso.titulo}
         mensagem={modalAviso.mensagem}
+        onConfirmar={modalAviso.onConfirmar}
         onCancelar={() => setModalAviso((prev) => ({ ...prev, isOpen: false }))}
       />
     </div>
