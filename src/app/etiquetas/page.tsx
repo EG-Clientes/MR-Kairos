@@ -285,56 +285,79 @@ export default function GeradorEtiquetasPage() {
               <div className="p-4 bg-slate-100/60 rounded-2xl border border-slate-200/80 shadow-inner print:bg-transparent print:p-0 print:border-none print:shadow-none">
                 
                 {/* A ETIQUETA REAL (Desenhada idêntica ao PowerPoint) */}
-                <div className="print-label w-[450px] h-[300px] border border-slate-900 bg-white p-4 flex flex-col justify-between text-[10px] text-slate-900 leading-tight select-none shadow-sm print:shadow-none print:border-none">
+                <div className="print-label w-[450px] h-[300px] bg-white p-4 flex flex-col justify-between text-[10px] text-black leading-tight select-none shadow-sm print:shadow-none print:border-none">
                   
-                  {/* Header: Logo do Importador */}
-                  <div className="flex flex-col items-center border-b border-slate-200 pb-1.5">
+                  {/* Header: Logo do Importador Centralizado */}
+                  <div className="flex flex-col items-center">
                     {produtoSelecionado.empresas?.logo_url ? (
                       <img
                         src={produtoSelecionado.empresas.logo_url}
                         alt="Logo"
-                        className="h-7 object-contain mb-0.5"
+                        className="h-8 object-contain"
                       />
                     ) : (
-                      <span className="font-bold text-sm text-slate-800 tracking-wider">
+                      <span className="font-bold text-base text-black tracking-wider">
                         {produtoSelecionado.empresas?.razao_social}
                       </span>
                     )}
                   </div>
 
-                  {/* Bloco do Meio: Avisos Legais Inteligentes e Ícone 0-3 */}
-                  <div className="flex-1 flex items-center justify-between py-2 space-x-2">
-                    <div className={`flex-1 text-center font-bold ${classTamanhoFonte} text-slate-800 space-y-1 max-h-[140px] overflow-hidden`}>
+                  {/* Bloco do Meio: Avisos Legais Centralizados + Selo Etário 0-3 à Direita */}
+                  <div className="relative flex items-center justify-center my-auto py-1 w-full min-h-[90px]">
+                    <div className={`w-[320px] text-center font-bold ${classTamanhoFonte} text-black space-y-1 pr-2`}>
                       {avisos.map((aviso, i) => (
                         <p key={i}>{aviso}</p>
                       ))}
-                      <p className="uppercase text-slate-900 font-extrabold tracking-wide mt-1">
+                      <p className="uppercase text-black font-extrabold tracking-wide mt-1">
                         INDICADO PARA CRIANÇAS MAIORES DE {(produtoSelecionado.idade_minima || "3 ANOS").replace(/^\+/, "").trim()}.
                       </p>
-                      <p className="uppercase text-slate-800 font-semibold">
-                        GUARDAR PARA EVENTUAIS CONSULTAS.
+                      <p className="uppercase text-black font-bold">
+                        GUARDAR PARA EVENTUAIS CONSULTAS
                       </p>
                     </div>
 
-                    {/* Ícone Redondo 0-3 Anos Condicional */}
+                    {/* Selo Regulamentar 0-3 Anos Idêntico ao Original */}
                     {produtoSelecionado.restritivo_0_3_anos && (
-                      <div className="w-14 h-14 border-4 border-red-600 rounded-full flex flex-col items-center justify-center font-bold text-slate-900 leading-none relative flex-shrink-0 bg-white">
-                        <span className="text-[14px]">0-3</span>
-                        {/* Linha Diagonal Proibitiva Vermelha */}
-                        <div className="absolute w-full h-[3px] bg-red-600 rotate-45 top-1/2 left-0 -translate-y-1/2"></div>
+                      <div className="absolute right-1 top-1/2 -translate-y-1/2 w-14 h-14 flex-shrink-0">
+                        <svg className="w-full h-full" viewBox="0 0 100 100">
+                          {/* Círculo externo vermelho */}
+                          <circle cx="50" cy="50" r="44" stroke="#DC2626" strokeWidth="8" fill="#FFF" />
+                          {/* Barra diagonal vermelha cortando do topo-esquerdo ao fundo-direito */}
+                          <line x1="19" y1="19" x2="81" y2="81" stroke="#DC2626" strokeWidth="8" strokeLinecap="round" />
+                          {/* Texto 0-3 */}
+                          <text x="20" y="68" fill="#000" fontSize="22" fontWeight="bold" fontFamily="Arial, Helvetica, sans-serif">0-3</text>
+                          {/* Cabeça do bebê */}
+                          <circle cx="70" cy="38" r="14" stroke="#000" strokeWidth="2.2" fill="#FFF" />
+                          {/* Topete gota d'água */}
+                          <path d="M 69 24 C 67 19, 73 19, 71 24" stroke="#000" strokeWidth="2" fill="none" strokeLinecap="round" />
+                          {/* Olhos (pontos) */}
+                          <circle cx="66" cy="36" r="1.5" fill="#000" />
+                          <circle cx="74" cy="36" r="1.5" fill="#000" />
+                          {/* Nariz angular idêntico ao modelo (traço vertical + horizontal) */}
+                          <path d="M 70 37 L 70 41 L 68 41" stroke="#000" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                          {/* Boca triste (curva pra baixo) */}
+                          <path d="M 66 45 Q 70 41 74 45" stroke="#000" strokeWidth="2" strokeLinecap="round" fill="none" />
+                        </svg>
                       </div>
                     )}
                   </div>
 
-                  {/* Rodapé: Dados do Produto e Inmetro */}
-                  <div className="border-t border-slate-200 pt-1.5 grid grid-cols-3 gap-2 items-end">
-                    {/* Coluna 1: Dados Jurídicos */}
-                    <div className="col-span-2 space-y-0.5 text-[6.5px] text-slate-700 font-medium leading-normal">
-                      <p className="font-extrabold text-slate-900 text-[8px] uppercase tracking-wide">
+                  {/* Rodapé: 3 Colunas (Dados à Esquerda | Código de Barras ao Centro | Selo INMETRO à Direita) */}
+                  <div className="flex items-end justify-between gap-1 pt-1">
+                    {/* Coluna 1: Dados Jurídicos do Produto e Importador (Sem truncate para exibir 100% do endereço) */}
+                    <div className="space-y-[1px] text-[6.5px] text-black font-medium leading-tight max-w-[185px]">
+                      <p className="font-extrabold text-black text-[7.5px] uppercase tracking-wide mb-0.5">
                         {produtoSelecionado.descricao}
                       </p>
                       <p>
-                        <span className="font-bold">Ref:</span> {produtoSelecionado.fty_no} | <span className="font-bold">Item:</span> {produtoSelecionado.fty_no}
+                        {produtoSelecionado.fty_no.includes("Item:") ? (
+                          <span className="font-bold">Ref: {produtoSelecionado.fty_no}</span>
+                        ) : (
+                          <>
+                            <span className="font-bold">Ref:</span> {produtoSelecionado.fty_no} &nbsp;&nbsp;
+                            <span className="font-bold">Item:</span> {produtoSelecionado.fty_no}
+                          </>
+                        )}
                       </p>
                       <p>
                         <span className="font-bold">Código de barras:</span> {produtoSelecionado.ean_13}
@@ -342,7 +365,7 @@ export default function GeradorEtiquetasPage() {
                       <p>
                         <span className="font-bold">Importador:</span> {produtoSelecionado.empresas?.razao_social}
                       </p>
-                      <p className="truncate">
+                      <p className="leading-[1.15]">
                         <span className="font-bold">Endereço:</span> {produtoSelecionado.empresas?.endereco || "Não informado"}
                       </p>
                       <p>
@@ -368,38 +391,77 @@ export default function GeradorEtiquetasPage() {
                       </p>
                     </div>
 
-                    {/* Coluna 2: Código de Barras e Inmetro */}
-                    <div className="flex flex-col items-end space-y-1">
-                      {/* Código de barras dinâmico gerado localmente em SVG */}
+                    {/* Coluna 2: Código de Barras EAN-13 Centralizado */}
+                    <div className="flex items-end pb-0.5 flex-shrink-0">
                       {produtoSelecionado.ean_13 ? (
                         <svg 
                           ref={barcodeRef} 
-                          className="h-7 w-24 object-contain"
+                          className="h-10 w-28 object-contain"
                         ></svg>
                       ) : (
-                        <div className="h-7 w-24 bg-slate-50 flex items-center justify-center text-[6px] text-slate-400 border border-dashed border-slate-200 rounded">
+                        <div className="h-10 w-28 bg-slate-50 flex items-center justify-center text-[6px] text-slate-400 border border-dashed border-slate-200 rounded">
                           Sem EAN
                         </div>
                       )}
+                    </div>
 
-                      {/* Selo do Inmetro no Layout Exato */}
+                    {/* Coluna 3: Selo Oficial INMETRO / OCP Idêntico ao Modelo */}
+                    <div className="flex-shrink-0">
                       {produtoSelecionado.inmetro_familias ? (
-                        <div className="border border-slate-400 p-1 rounded flex items-center space-x-1 bg-white flex-shrink-0 w-28 justify-between">
-                          <div className="text-[5px] font-bold text-slate-800 leading-tight">
-                            <p>Segurança</p>
-                            <p className="text-[7px] font-extrabold text-slate-900 leading-none my-0.5 uppercase">
-                              {produtoSelecionado.inmetro_familias.ocp_nome || "brics"}
-                            </p>
-                            <p>
-                              OCP {produtoSelecionado.inmetro_familias.ocp_numero || "0098"}
-                            </p>
-                          </div>
-                          <div className="flex flex-col items-center">
-                            <div className="border border-slate-900 px-1 py-0.5 font-black text-[6px] tracking-tighter leading-none bg-white">
-                              INMETRO
+                        <div className="border border-neutral-300 rounded-xl px-2.5 py-1.5 bg-white w-[104px] flex flex-col items-center">
+                          {/* Título Segurança */}
+                          <span className="font-black text-[9px] text-black tracking-tight mb-1">
+                            Segurança
+                          </span>
+
+                          {/* Área Central: Logo BRICS e Logo INMETRO lado a lado */}
+                          <div className="w-full flex items-center justify-between px-1 my-0.5">
+                            {/* Logo Oficial BRICS */}
+                            <div className="flex flex-col items-center">
+                              <div className="flex items-baseline">
+                                <span className="font-bold text-[11px] text-black tracking-tighter">br</span>
+                                <span className="relative font-bold text-[11px] text-black tracking-tighter">
+                                  {/* As 4 esferas em curva sobre o i idênticas à marca */}
+                                  <span className="absolute -top-[5px] left-[-3px] flex items-end">
+                                    <span className="w-[1.4px] h-[1.4px] bg-black rounded-full mb-[1px]"></span>
+                                    <span className="w-[1.6px] h-[1.6px] bg-black rounded-full mb-[2.2px] ml-[0.6px]"></span>
+                                    <span className="w-[1.8px] h-[1.8px] bg-black rounded-full mb-[3.2px] ml-[0.6px]"></span>
+                                    <span className="w-[1.4px] h-[1.4px] bg-black rounded-full mb-[1.2px] ml-[0.6px]"></span>
+                                  </span>
+                                  ı
+                                </span>
+                                <span className="font-bold text-[11px] text-black tracking-tighter">cs</span>
+                              </div>
+                              <span className="text-[5.5px] font-bold text-black tracking-tight mt-0.5 whitespace-nowrap">
+                                OCP {produtoSelecionado.inmetro_familias.ocp_numero || "0098"}
+                              </span>
                             </div>
-                            <p className="text-[4.5px] text-slate-800 font-extrabold mt-1 text-center tracking-tighter leading-none">
-                              REGISTRO {produtoSelecionado.inmetro_familias.numero_registro}
+
+                            {/* Logo Oficial INMETRO (Geometria Idêntica à Original) */}
+                            <div className="flex flex-col items-center pl-1">
+                              <svg className="w-7 h-6" viewBox="0 0 52 46">
+                                {/* Barra Superior */}
+                                <rect x="0" y="0" width="52" height="7" fill="#000" />
+                                {/* Barra Inferior */}
+                                <rect x="0" y="39" width="52" height="7" fill="#000" />
+                                {/* Triângulo Superior Preto (pilar direito maciço) */}
+                                <polygon points="17,7 36,7 36,28" fill="#000" />
+                                {/* Triângulo Inferior Preto (pilar esquerdo maciço) */}
+                                <polygon points="16,18 16,39 35,39" fill="#000" />
+                              </svg>
+                              <span className="text-[6.5px] font-black italic tracking-tighter text-black mt-0.5">
+                                INMETRO
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Rodapé Oficial do Selo: REGISTRO + Número */}
+                          <div className="text-center mt-1 leading-none">
+                            <p className="text-[5.5px] font-bold text-black tracking-wider">
+                              REGISTRO
+                            </p>
+                            <p className="text-[6.5px] font-black text-black tracking-tight mt-0.5">
+                              {produtoSelecionado.inmetro_familias.numero_registro}
                             </p>
                           </div>
                         </div>
