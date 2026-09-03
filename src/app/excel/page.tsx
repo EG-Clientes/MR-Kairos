@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ExcelJS from "exceljs";
 import JsBarcode from "jsbarcode";
@@ -55,6 +56,7 @@ interface FamiliaOption {
 }
 
 export default function LiquidificadorPage() {
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [colunaFty, setColunaFty] = useState<string>("A"); // Padrão da planilha da China
   const [colunaEtiqueta, setColunaEtiqueta] = useState<string>("C"); // Padrão da etiqueta
@@ -116,7 +118,7 @@ export default function LiquidificadorPage() {
     return codigo + dv.toString();
   }
 
-  // Função mágica do 1-Clique: Cadastra todos os itens pendentes no banco e roda a geração
+  // Função de Cadastro em Lote com Trava de Compliance
   async function handleCadastrarLoteEContinuar() {
     if (!empresaLote) {
       setModalAviso({
@@ -144,7 +146,7 @@ export default function LiquidificadorPage() {
         partes_pequenas: true,
         metal: false,
         restritivo_0_3_anos: true,
-        idade_minima: "+3 anos",
+        idade_minima: "3 anos",
       }));
 
       const { error } = await supabase.from("produtos").insert(novosRegistros);
@@ -155,9 +157,18 @@ export default function LiquidificadorPage() {
 
       setIsAlertOpen(false);
       setSalvandoLote(false);
-      
-      // Roda o processamento imediatamente!
-      await processarPlanilha();
+
+      // Aviso de Compliance: Dá a opção de revisar no catálogo ou gerar agora
+      setModalAviso({
+        isOpen: true,
+        tipo: "sucesso",
+        titulo: "Produtos Cadastrados com Sucesso!",
+        mensagem: `${novosRegistros.length} produtos foram adicionados ao catálogo com EAN-13 gerados automaticamente.\n\nRecomendamos acessar o Catálogo de Produtos para vincular as Famílias/Certificados Inmetro antes do envio à China.`,
+        onConfirmar: () => {
+          setModalAviso((prev) => ({ ...prev, isOpen: false }));
+          router.push("/produtos");
+        },
+      });
     } catch (err: any) {
       setModalAviso({
         isOpen: true,
@@ -240,8 +251,9 @@ export default function LiquidificadorPage() {
         }
       });
 
+      const idadeFormatada = (prod.idade_minima || "3 ANOS").replace(/^\+/, "").trim();
       ctx.font = "900 22px Arial, sans-serif";
-      ctx.fillText(`INDICADO PARA CRIANÇAS MAIORES DE ${prod.idade_minima || "3 ANOS"}.`, canvas.width / 2 - (prod.restritivo_0_3_anos ? 50 : 0), yPos + 10);
+      ctx.fillText(`INDICADO PARA CRIANÇAS MAIORES DE ${idadeFormatada}.`, canvas.width / 2 - (prod.restritivo_0_3_anos ? 50 : 0), yPos + 10);
       ctx.font = "bold 18px Arial, sans-serif";
       ctx.fillText("GUARDAR PARA EVENTUAIS CONSULTAS.", canvas.width / 2 - (prod.restritivo_0_3_anos ? 50 : 0), yPos + 36);
 
@@ -382,18 +394,38 @@ export default function LiquidificadorPage() {
 
       worksheet.eachRow((row, rowNumber) => {
         const cellFty = row.getCell(colunaFty).text?.trim();
-        const cellDesc = row.getCell("D").text?.trim() || row.getCell("B").text?.trim() || "PRODUTO IMPORTADO";
 
-        // Detecta a linha do cabeçalho oficial (ex: onde está escrito FTY NO ou ITEM)
+        // Inteligência na Descrição: se a coluna do código for B (planilha chinesa), a descrição é o próprio nome da B
+        let cellDesc = "";
+        if (colunaFty.toUpperCase() === "B") {
+          cellDesc = cellFty || "PRODUTO IMPORTADO";
+        } else {
+          cellDesc = row.getCell("D").text?.trim() || row.getCell("B").text?.trim() || cellFty || "PRODUTO IMPORTADO";
+        }
+
+        // Se por acaso a descrição capturada for puramente numérica (ex: quantidade de caixa 220), usa o código do produto
+        if (cellDesc && /^\d+$/.test(cellDesc) && cellFty) {
+          cellDesc = cellFty;
+        }
+
+        // Detecta a linha do cabeçalho oficial de forma flexível (FTY, ITEM, REF, ART, NO, ou termos chineses)
         if (!comecouProdutos) {
-          if (cellFty && cellFty.toUpperCase().includes("FTY")) {
+          const termosCabecalho = ["FTY", "ITEM", "REF", "ART", "NO.", "MODEL", "品名", "序号"];
+          const ehCabecalho = cellFty && termosCabecalho.some((termo) => cellFty.toUpperCase().includes(termo));
+          if (ehCabecalho) {
             comecouProdutos = true;
           }
           return;
         }
 
-        // Ignora linhas vazias ou de totalizadores (TOTAL / SUM)
-        if (cellFty && !cellFty.toUpperCase().includes("TOTAL") && !cellFty.toUpperCase().includes("SUM")) {
+        // Ignora linhas vazias ou de totalizadores (TOTAL / SUM / TT)
+        const ehTotalizador = cellFty && (
+          cellFty.toUpperCase().includes("TOTAL") ||
+          cellFty.toUpperCase().includes("SUM") ||
+          cellFty.toUpperCase() === "TT"
+        );
+
+        if (cellFty && !ehTotalizador) {
           itensPlanilha.push({
             linha: rowNumber,
             fty_no: cellFty,
@@ -445,6 +477,39 @@ export default function LiquidificadorPage() {
       if (faltantes.length > 0) {
         setNaoCadastrados(faltantes);
         setIsAlertOpen(true);
+        setLoading(false);
+        setStatusMsg("");
+        return;
+      }
+
+      // TRAVA DURA DE COMPLIANCE: Bloqueia geração se houver produtos sem Inmetro ou com certificado vencido
+      const hojeIso = new Date().toISOString().split("T")[0];
+      const produtosSemInmetro: string[] = [];
+
+      itensPlanilha.forEach((item) => {
+        const prod = produtosMap.get(item.fty_no.trim().toUpperCase());
+        
+        // 1. Bloqueia se o produto não tem família vinculada no banco
+        if (!prod || !(prod as any).familia_id || !prod.inmetro_familias || !prod.inmetro_familias.numero_registro) {
+          produtosSemInmetro.push(item.fty_no);
+        } 
+        // 2. Bloqueia se o certificado vinculado estiver vencido ou marcado como sem registro
+        else if (
+          prod.inmetro_familias.status === "Vencido" ||
+          prod.inmetro_familias.status === "Sem Registro" ||
+          (prod.inmetro_familias.data_validade && prod.inmetro_familias.data_validade < hojeIso)
+        ) {
+          produtosSemInmetro.push(`${item.fty_no} (Certificado Vencido)`);
+        }
+      });
+
+      if (produtosSemInmetro.length > 0) {
+        setModalAviso({
+          isOpen: true,
+          tipo: "perigo",
+          titulo: "Geração Bloqueada: Risco de Multa",
+          mensagem: `Existem ${produtosSemInmetro.length} produto(s) nesta planilha sem Certificado Inmetro válido vinculado:\n\n${produtosSemInmetro.slice(0, 10).join(", ")}${produtosSemInmetro.length > 10 ? `... e mais ${produtosSemInmetro.length - 10} itens` : ""}\n\nVincule a Família Inmetro no Catálogo de Produtos antes de gerar a planilha para a China.`,
+        });
         setLoading(false);
         setStatusMsg("");
         return;

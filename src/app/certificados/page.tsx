@@ -66,6 +66,11 @@ export default function CertificadosPage() {
   const [editingId, setEditingId] = useState<string | null>(null); // Guarda o ID se for edição
   const [error, setError] = useState<string | null>(null);
 
+  // Estados dos Filtros Inteligentes
+  const [filtroEmpresa, setFiltroEmpresa] = useState<string>("");
+  const [filtroFamilia, setFiltroFamilia] = useState<string>("");
+  const [filtroStatus, setFiltroStatus] = useState<string>("todos");
+
   // Estado do Modal Bonitão
   const [modalAviso, setModalAviso] = useState<{
     isOpen: boolean;
@@ -226,6 +231,48 @@ export default function CertificadosPage() {
     }
   }
 
+  // --- LÓGICA DE FILTRAGEM & ALERTAS EM MEMÓRIA ---
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  // Identifica certificados vencidos ou vencendo em 30 dias
+  const certificadosEmRisco = certificados.filter((cert) => {
+    if (cert.status === "Sem Registro" || cert.status === "Vencido") return true;
+    if (!cert.data_validade) return true;
+    const partes = cert.data_validade.split("T")[0].split("-");
+    const dataVal = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
+    const diffDias = Math.ceil((dataVal.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+    return diffDias <= 30;
+  });
+
+  // Lista única de famílias para o select de filtro
+  const familiasDisponiveis = Array.from(
+    new Set(
+      certificados
+        .filter((c) => !filtroEmpresa || c.empresa_id === filtroEmpresa)
+        .map((c) => c.nome_familia)
+    )
+  );
+
+  // Aplicação dos 3 filtros em tempo real
+  const certificadosExibidos = certificados.filter((cert) => {
+    if (filtroEmpresa && cert.empresa_id !== filtroEmpresa) return false;
+    if (filtroFamilia && cert.nome_familia !== filtroFamilia) return false;
+
+    if (filtroStatus !== "todos") {
+      const statusObj = obterStatusDinamico(cert.data_validade, cert.status);
+      if (filtroStatus === "em_risco") {
+        return statusObj.rotulo === "Vencido" || statusObj.rotulo.startsWith("Vence em");
+      }
+      if (filtroStatus === "vencido") return statusObj.rotulo === "Vencido";
+      if (filtroStatus === "vencendo") return statusObj.rotulo.startsWith("Vence em");
+      if (filtroStatus === "ativo") return statusObj.rotulo === "Ativo";
+      if (filtroStatus === "sem_registro") return statusObj.rotulo === "Sem Registro";
+    }
+
+    return true;
+  });
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       {/* Cabeçalho */}
@@ -248,6 +295,121 @@ export default function CertificadosPage() {
         </button>
       </div>
 
+      {/* BANNER DE ALERTA DE COMPLIANCE */}
+      {!loading && certificadosEmRisco.length > 0 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-red-50/60 border border-red-200 shadow-[0_2px_12px_rgba(239,68,68,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center space-x-3.5">
+            <div className="p-2.5 bg-red-100 text-red-600 rounded-xl border border-red-200/80 flex-shrink-0">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-red-900">
+                {certificadosEmRisco.length} certificado{certificadosEmRisco.length > 1 ? "s" : ""} requer{certificadosEmRisco.length > 1 ? "em" : "e"} atenção
+              </h4>
+              <p className="text-xs text-red-700/80 mt-0.5">
+                Certificados vencidos ou a 30 dias do prazo impedem a etiquetagem e desembaraço das cargas.
+              </p>
+            </div>
+          </div>
+          {filtroStatus !== "em_risco" && (
+            <button
+              onClick={() => setFiltroStatus("em_risco")}
+              className="text-xs font-bold text-red-700 bg-red-100/80 hover:bg-red-200 border border-red-200 px-3.5 py-2 rounded-xl transition flex-shrink-0 self-start sm:self-auto"
+            >
+              Filtrar certificados em risco
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* CARD DE FILTROS INTELIGENTES */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div className="flex items-center space-x-2">
+            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Filtros de Certificados</h2>
+          </div>
+          {(filtroEmpresa || filtroFamilia || filtroStatus !== "todos") && (
+            <button
+              onClick={() => {
+                setFiltroEmpresa("");
+                setFiltroFamilia("");
+                setFiltroStatus("todos");
+              }}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition w-fit"
+            >
+              Limpar Filtros
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 1. Filtro por Importador */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Importador
+            </label>
+            <select
+              value={filtroEmpresa}
+              onChange={(e) => {
+                setFiltroEmpresa(e.target.value);
+                setFiltroFamilia("");
+              }}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition"
+            >
+              <option value="">Todos os Importadores</option>
+              {empresas.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.razao_social}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 2. Filtro por Família */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Família de Produtos
+            </label>
+            <select
+              value={filtroFamilia}
+              onChange={(e) => setFiltroFamilia(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition"
+            >
+              <option value="">Todas as Famílias</option>
+              {familiasDisponiveis.map((fam, idx) => (
+                <option key={idx} value={fam}>
+                  {fam}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 3. Filtro por Situação / Compliance */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Situação do Certificado
+            </label>
+            <select
+              value={filtroStatus}
+              onChange={(e) => setFiltroStatus(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition font-medium"
+            >
+              <option value="todos">Todos os Status</option>
+              <option value="em_risco">Em Risco (Vencidos ou Vencendo)</option>
+              <option value="vencendo">Vencendo nos Próximos 30d</option>
+              <option value="vencido">Apenas Vencidos</option>
+              <option value="ativo">Apenas Ativos</option>
+              <option value="sem_registro">Sem Registro</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* Tabela de Certificados */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] overflow-hidden">
         {loading ? (
@@ -255,7 +417,7 @@ export default function CertificadosPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
             Carregando certificados...
           </div>
-        ) : certificados.length > 0 ? (
+        ) : certificadosExibidos.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100">
               <thead className="bg-slate-50/50">
@@ -269,7 +431,7 @@ export default function CertificadosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {certificados.map((cert) => (
+                {certificadosExibidos.map((cert) => (
                   <tr key={cert.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-4 px-6 font-semibold text-slate-800">
                       {cert.empresas?.razao_social || "Não vinculado"}
@@ -312,7 +474,9 @@ export default function CertificadosPage() {
           </div>
         ) : (
           <div className="text-center py-16 text-slate-400 text-sm">
-            Nenhum certificado cadastrado para nenhuma família.
+            {certificados.length === 0
+              ? "Nenhum certificado cadastrado para nenhuma família."
+              : "Nenhum certificado encontrado para os filtros selecionados."}
           </div>
         )}
       </div>

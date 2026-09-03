@@ -40,6 +40,7 @@ export default function GeradorEtiquetasPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busca, setBusca] = useState<string>(""); // Campo de busca instantânea
 
   // Estado do Modal Bonitão
   const [modalAviso, setModalAviso] = useState<{
@@ -148,6 +149,16 @@ export default function GeradorEtiquetasPage() {
     produtoSelecionado.inmetro_familias.status === "Sem Registro" ||
     (produtoSelecionado.inmetro_familias.data_validade ? produtoSelecionado.inmetro_familias.data_validade < hojeString : false);
 
+  // Filtro instantâneo por código FTY NO ou descrição
+  const produtosFiltrados = produtos.filter((prod) => {
+    if (!busca.trim()) return true;
+    const termo = busca.toLowerCase();
+    return (
+      prod.fty_no.toLowerCase().includes(termo) ||
+      prod.descricao.toLowerCase().includes(termo)
+    );
+  });
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto print:p-0 print:m-0 print:max-w-none">
       {/* Cabeçalho de Controle - Ocultado na Impressão */}
@@ -183,14 +194,36 @@ export default function GeradorEtiquetasPage() {
       {/* Grid de Operação - Ocultado na Impressão */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 print:block">
         {/* Lado Esquerdo: Seleção do Produto (4 Colunas) */}
-        <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-4 print:hidden flex flex-col h-fit">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-3 print:hidden flex flex-col h-fit">
+          <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
             <h2 className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-              Catálogo de Produtos ({produtos.length})
+              Catálogo de Produtos ({produtosFiltrados.length})
             </h2>
             <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-md">
               Selecione
             </span>
+          </div>
+
+          {/* Campo de Busca Rápida por FTY NO */}
+          <div className="relative">
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por FTY NO ou nome..."
+              className="w-full pl-8 pr-7 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50/60 focus:bg-white focus:border-blue-500 outline-none transition font-medium"
+            />
+            <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            {busca && (
+              <button 
+                onClick={() => setBusca("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           {loading ? (
@@ -198,9 +231,9 @@ export default function GeradorEtiquetasPage() {
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-3"></div>
               Carregando catálogo...
             </div>
-          ) : produtos.length > 0 ? (
-            <div className="space-y-2.5 max-h-[520px] overflow-y-auto pr-1">
-              {produtos.map((prod) => {
+          ) : produtosFiltrados.length > 0 ? (
+            <div className="space-y-2.5 max-h-[480px] overflow-y-auto pr-1">
+              {produtosFiltrados.map((prod) => {
                 const isSelected = produtoSelecionado?.id === prod.id;
                 return (
                   <button
@@ -275,7 +308,7 @@ export default function GeradorEtiquetasPage() {
                         <p key={i}>{aviso}</p>
                       ))}
                       <p className="uppercase text-slate-900 font-extrabold tracking-wide mt-1">
-                        INDICADO PARA CRIANÇAS MAIORES DE {produtoSelecionado.idade_minima || "3 ANOS"}.
+                        INDICADO PARA CRIANÇAS MAIORES DE {(produtoSelecionado.idade_minima || "3 ANOS").replace(/^\+/, "").trim()}.
                       </p>
                       <p className="uppercase text-slate-800 font-semibold">
                         GUARDAR PARA EVENTUAIS CONSULTAS.

@@ -32,7 +32,7 @@ interface Produto {
   restritivo_0_3_anos: boolean;
   idade_minima: string | null;
   empresas: { razao_social: string } | null;
-  inmetro_familias: { nome_familia: string } | null;
+  inmetro_familias: { nome_familia: string; status: string | null; data_validade: string | null } | null;
 }
 
 // ALGORITMO GERADOR DE EAN-13 BRASILEIRO (789) VÁLIDO
@@ -69,6 +69,11 @@ export default function ProdutosPage() {
   const [editingId, setEditingId] = useState<string | null>(null); // ID se for edição
   const [error, setError] = useState<string | null>(null);
 
+  // Estados dos Filtros Inteligentes
+  const [filtroEmpresa, setFiltroEmpresa] = useState<string>("");
+  const [filtroFamilia, setFiltroFamilia] = useState<string>("");
+  const [filtroStatus, setFiltroStatus] = useState<string>("todos");
+
   // Estado do Modal Bonitão
   const [modalAviso, setModalAviso] = useState<{
     isOpen: boolean;
@@ -103,7 +108,7 @@ export default function ProdutosPage() {
     const [prodResult, empResult, famResult] = await Promise.all([
       supabase
         .from("produtos")
-        .select("*, empresas(razao_social), inmetro_familias(nome_familia)")
+        .select("*, empresas(razao_social), inmetro_familias(nome_familia, status, data_validade)")
         .order("created_at"),
       supabase
         .from("empresas")
@@ -306,6 +311,41 @@ export default function ProdutosPage() {
     }
   }
 
+  // --- LÓGICA DE FILTRAGEM & COMPLIANCE EM MEMÓRIA ---
+  const hojeString = new Date().toISOString().split("T")[0];
+
+  // Contagem de produtos em risco (sem registro ou com certificado vencido)
+  const produtosEmRisco = produtos.filter((prod) => {
+    if (!prod.familia_id || !prod.inmetro_familias) return true;
+    if (prod.inmetro_familias.status === "Vencido" || prod.inmetro_familias.status === "Sem Registro") return true;
+    if (prod.inmetro_familias.data_validade && prod.inmetro_familias.data_validade < hojeString) return true;
+    return false;
+  });
+
+  // Famílias para o select de filtro (se uma empresa estiver filtrada, lista só as dela)
+  const familiasParaFiltro = filtroEmpresa
+    ? familias.filter((f) => f.empresa_id === filtroEmpresa)
+    : familias;
+
+  // Aplicação dos 3 filtros sobre a lista
+  const produtosExibidos = produtos.filter((prod) => {
+    if (filtroEmpresa && prod.empresa_id !== filtroEmpresa) return false;
+    if (filtroFamilia && prod.familia_id !== filtroFamilia) return false;
+
+    const ehSemRegistro = !prod.familia_id || !prod.inmetro_familias || prod.inmetro_familias.status === "Sem Registro";
+    const ehVencido = Boolean(
+      prod.inmetro_familias?.status === "Vencido" ||
+      (prod.inmetro_familias?.data_validade && prod.inmetro_familias.data_validade < hojeString)
+    );
+
+    if (filtroStatus === "sem_registro") return ehSemRegistro;
+    if (filtroStatus === "vencidos") return ehVencido;
+    if (filtroStatus === "em_risco") return ehSemRegistro || ehVencido;
+    if (filtroStatus === "em_dia") return !ehSemRegistro && !ehVencido;
+
+    return true;
+  });
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       {/* Cabeçalho */}
@@ -328,6 +368,120 @@ export default function ProdutosPage() {
         </button>
       </div>
 
+      {/* BANNER DE ALERTA DE COMPLIANCE */}
+      {!loading && produtosEmRisco.length > 0 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-red-50/60 border border-red-200 shadow-[0_2px_12px_rgba(239,68,68,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center space-x-3.5">
+            <div className="p-2.5 bg-red-100 text-red-600 rounded-xl border border-red-200/80 flex-shrink-0">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-red-900">
+                {produtosEmRisco.length} produto{produtosEmRisco.length > 1 ? "s" : ""} com pendência de Inmetro
+              </h4>
+              <p className="text-xs text-red-700/80 mt-0.5">
+                Itens sem registro ou com certificado vencido bloqueiam a geração das etiquetas e a exportação para o Excel.
+              </p>
+            </div>
+          </div>
+          {filtroStatus !== "em_risco" && (
+            <button
+              onClick={() => setFiltroStatus("em_risco")}
+              className="text-xs font-bold text-red-700 bg-red-100/80 hover:bg-red-200 border border-red-200 px-3.5 py-2 rounded-xl transition flex-shrink-0 self-start sm:self-auto"
+            >
+              Filtrar produtos em risco
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* CARD DE FILTROS INTELIGENTES */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div className="flex items-center space-x-2">
+            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Filtros de Catálogo</h2>
+          </div>
+          {(filtroEmpresa || filtroFamilia || filtroStatus !== "todos") && (
+            <button
+              onClick={() => {
+                setFiltroEmpresa("");
+                setFiltroFamilia("");
+                setFiltroStatus("todos");
+              }}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition w-fit"
+            >
+              Limpar Filtros
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 1. Filtro por Importador */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Importador
+            </label>
+            <select
+              value={filtroEmpresa}
+              onChange={(e) => {
+                setFiltroEmpresa(e.target.value);
+                setFiltroFamilia("");
+              }}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition"
+            >
+              <option value="">Todos os Importadores</option>
+              {empresas.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.razao_social}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 2. Filtro por Família */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Família Inmetro
+            </label>
+            <select
+              value={filtroFamilia}
+              onChange={(e) => setFiltroFamilia(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition"
+            >
+              <option value="">Todas as Famílias</option>
+              {familiasParaFiltro.map((fam) => (
+                <option key={fam.id} value={fam.id}>
+                  {fam.nome_familia}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 3. Filtro por Situação / Compliance */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Situação Inmetro
+            </label>
+            <select
+              value={filtroStatus}
+              onChange={(e) => setFiltroStatus(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition font-medium"
+            >
+              <option value="todos">Todos os Produtos</option>
+              <option value="em_risco">Em Risco (Sem Registro ou Vencidos)</option>
+              <option value="sem_registro">Apenas Sem Registro</option>
+              <option value="vencidos">Apenas Certificado Vencido</option>
+              <option value="em_dia">Em Dia (Certificados Válidos)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* Tabela de Produtos */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] overflow-hidden">
         {loading ? (
@@ -335,7 +489,7 @@ export default function ProdutosPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
             Carregando produtos...
           </div>
-        ) : produtos.length > 0 ? (
+        ) : produtosExibidos.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100">
               <thead className="bg-slate-50/50">
@@ -350,7 +504,7 @@ export default function ProdutosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {produtos.map((prod) => (
+                {produtosExibidos.map((prod) => (
                   <tr key={prod.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-4 px-6 font-semibold text-slate-800">
                       {prod.empresas?.razao_social || "Não vinculado"}
@@ -421,7 +575,9 @@ export default function ProdutosPage() {
           </div>
         ) : (
           <div className="text-center py-16 text-slate-400 text-sm">
-            Nenhum produto cadastrado até o momento.
+            {produtos.length === 0 
+              ? "Nenhum produto cadastrado até o momento." 
+              : "Nenhum produto encontrado para os filtros selecionados."}
           </div>
         )}
       </div>
