@@ -404,7 +404,6 @@ export default function CertificadosPage() {
               <option value="vencendo">Vencendo nos Próximos 30d</option>
               <option value="vencido">Apenas Vencidos</option>
               <option value="ativo">Apenas Ativos</option>
-              <option value="sem_registro">Sem Registro</option>
             </select>
           </div>
         </div>
