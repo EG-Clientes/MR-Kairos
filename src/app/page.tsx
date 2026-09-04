@@ -31,7 +31,7 @@ export default async function Home() {
   const { data: produtos } = produtoResult;
 
   // --- CÁLCULOS DE COMPLIANCE E INTELIGÊNCIA EM MEMÓRIA ---
-  const listaCertificados = certificados || [];
+  const listaCertificados: any[] = certificados || [];
   const listaProdutos = produtos || [];
   const listaEmpresas = empresas || [];
 
@@ -250,7 +250,7 @@ export default async function Home() {
                   return (
                     <tr key={cert.id} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-4 px-6 font-semibold text-slate-800">
-                        {cert.empresas?.razao_social || "Não vinculado"}
+                        {(Array.isArray(cert.empresas) ? cert.empresas[0]?.razao_social : cert.empresas?.razao_social) || "Não vinculado"}
                       </td>
                       <td className="py-4 px-6 text-slate-700 font-medium">{cert.nome_familia}</td>
                       <td className="py-4 px-6 text-slate-500 font-mono text-xs">{cert.numero_registro}</td>
