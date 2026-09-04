@@ -453,7 +453,7 @@ export default function CertificadosPage() {
                         );
                       })()}
                     </td>
-                    <td className="py-4 px-6 text-right space-x-2">
+                    <td className="py-4 px-6 text-right space-x-2 whitespace-nowrap">
                       <button
                         onClick={() => handleEditar(cert)}
                         className="text-blue-600 hover:text-blue-800 font-semibold text-xs bg-blue-50 hover:bg-blue-100/70 border border-blue-100 px-3 py-1.5 rounded-lg transition"

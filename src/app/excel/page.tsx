@@ -10,6 +10,7 @@ import ModalAviso from "@/components/ModalAviso";
 interface ProdutoDB {
   id: string;
   fty_no: string;
+  referencia_interna?: string | null;
   descricao: string;
   ean_13: string | null;
   ean_barras: string | null;
@@ -65,20 +66,24 @@ export default function LiquidificadorPage() {
   const [naoCadastrados, setNaoCadastrados] = useState<ItemNaoCadastrado[]>([]);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
 
-  // Estados para o Cadastro Rápido em 1 Clique
+  // Estados para o Cadastro Rápido em 1 Clique e Seleção da Carga
   const [empresas, setEmpresas] = useState<EmpresaOption[]>([]);
   const [familias, setFamilias] = useState<FamiliaOption[]>([]);
   const [empresaLote, setEmpresaLote] = useState<string>("");
+  const [empresaSelecionada, setEmpresaSelecionada] = useState<string>("");
   const [familiaLote, setFamiliaLote] = useState<string>("");
   const [salvandoLote, setSalvandoLote] = useState(false);
 
-  // Estado do Modal Bonitão
+  // Estado do Modal Bonitão com suporte a botões de decisão
   const [modalAviso, setModalAviso] = useState<{
     isOpen: boolean;
     tipo?: "perigo" | "alerta" | "sucesso" | "info";
     titulo: string;
     mensagem: string;
+    textoConfirmar?: string;
+    textoCancelar?: string;
     onConfirmar?: () => void;
+    onCancelar?: () => void;
   }>({ isOpen: false, titulo: "", mensagem: "" });
 
 
@@ -90,7 +95,6 @@ export default function LiquidificadorPage() {
     ]);
     if (empRes.data) {
       setEmpresas(empRes.data);
-      if (empRes.data.length > 0) setEmpresaLote(empRes.data[0].id);
     }
     if (famRes.data) setFamilias(famRes.data);
   }
@@ -136,7 +140,7 @@ export default function LiquidificadorPage() {
     try {
       const novosRegistros = naoCadastrados.map((item) => ({
         empresa_id: empresaLote,
-        familia_id: familiaLote || null,
+        familia_id: null,
         fty_no: item.fty_no,
         descricao: item.descricao,
         ean_13: gerarEanAutomatico(),
@@ -181,8 +185,18 @@ export default function LiquidificadorPage() {
     }
   }
 
-  // Helper de desenho de etiqueta térmica 10x15cm em alta resolução (1200x800px)
+  // Helper de desenho de etiqueta térmica 10x15cm em alta resolução (1200x800px) idêntica à tela de Etiquetas
   async function renderizarEtiquetaParaBuffer(prod: ProdutoDB): Promise<ArrayBuffer> {
+    // 1. Carregamento assíncrono da logo para garantir fidelidade visual
+    const logoImg: HTMLImageElement | null = await new Promise((res) => {
+      if (!prod.empresas?.logo_url) return res(null);
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => res(img);
+      img.onerror = () => res(null);
+      img.src = prod.empresas.logo_url;
+    });
+
     return new Promise((resolve) => {
       const canvas = document.createElement("canvas");
       canvas.width = 1200;
@@ -190,166 +204,290 @@ export default function LiquidificadorPage() {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      // Fundo Branco e Borda Fina de Contorno
+      // Fundo Branco puro (sem bordas pretas invasivas)
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = "#000000";
-      ctx.lineWidth = 4;
-      ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
 
-      // 1. TOPO: RAZÃO SOCIAL DA EMPRESA
-      ctx.fillStyle = "#000000";
-      ctx.font = "900 34px Arial, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(prod.empresas?.razao_social || "STONE IMPORTADORA", canvas.width / 2, 55);
+      // --- 1. TOPO: LOGO CENTRALIZADA OU RAZÃO SOCIAL ---
+      if (logoImg) {
+        const maxH = 80;
+        const maxW = 380;
+        const ratio = Math.min(maxW / logoImg.width, maxH / logoImg.height);
+        const lw = logoImg.width * ratio;
+        const lh = logoImg.height * ratio;
+        ctx.drawImage(logoImg, (canvas.width - lw) / 2, 35, lw, lh);
+      } else {
+        ctx.fillStyle = "#000000";
+        ctx.font = "900 38px Arial, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(prod.empresas?.razao_social || "IMPORTADORA", canvas.width / 2, 80);
+      }
 
-      ctx.beginPath();
-      ctx.moveTo(20, 75);
-      ctx.lineTo(canvas.width - 20, 75);
-      ctx.strokeStyle = "#000000";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // 2. CENTRO: AVISOS LEGAIS + SELO 0-3
+      // --- 2. CENTRO: AVISOS LEGAIS + SELO 0-3 DESCE NO 63% ---
       const avisos: string[] = [];
       if (prod.partes_pequenas) {
-        avisos.push("ATENÇÃO! NÃO RECOMENDÁVEL PARA CRIANÇAS MENORES DE 3 (TRÊS) ANOS POR CONTER PARTE(S) PEQUENA(S) QUE PODE(M) SER ENGOLIDA(S) OU ASPIRADA(S).");
+        avisos.push("ATENÇÃO! NÃO RECOMENDÁVEL PARA CRIANÇAS MENORES DE 3 (TRÊS) ANOS POR CONTER PARTE(S) PEQUENA(S) QUE PODEM SER ENGOLIDA(S) OU ASPIRADA(S).");
       }
       if (prod.metal) {
         avisos.push("ATENÇÃO! ESTA EMBALAGEM CONTÉM FECHOS METÁLICOS. RETIRAR O BRINQUEDO DA EMBALAGEM ANTES DE ENTREGAR À CRIANÇA.");
       }
       if (prod.usa_pilha) {
-        avisos.push("ATENÇÃO! AS PILHAS NÃO RECARREGÁVEIS NÃO DEVEM SER RECARREGADAS. NÃO MISTURAR PILHAS NOVAS COM USADAS.");
+        avisos.push("ATENÇÃO! ESTE BRINQUEDO DEVE SER MONTADO POR UM ADULTO ANTES DE SER ENTREGUE À CRIANÇA. AS BATERIAS DEVEM SER RETIRADAS DO BRINQUEDO ANTES DE SEREM RECARREGADAS; AS PILHAS NÃO RECARREGÁVEIS NÃO DEVEM SER RECARREGADAS; SÓ DEVEM SER USADAS PILHAS OU BATERIAS DO TIPO RECOMENDADO OU UM SIMILAR; AS PILHAS DEVEM SER COLOCADAS RESPEITANDO A POLARIDADE; AS PILHAS DESCARREGADAS DEVEM SER RETIRADAS DO BRINQUEDO; OS TERMINAIS DE UMA PILHA OU BATERIA NÃO DEVEM SER COLOCADOS EM CURTO-CIRCUITO.");
       }
       if (prod.contem_ima) {
-        avisos.push("CUIDADO: CONTÉM ÍMÃ(ES). A INGESTÃO DE ÍMÃ(ES) PODE CAUSAR LESÕES GRAVES E ATÉ FATAIS.");
+        avisos.push("CUIDADO: CONTÉM ÍMÃ(ES). A INGESTÃO OU ASPIRAÇÃO DE ÍMÃ(ES) PODE CAUSAR LESÕES GRAVES E ATÉ FATAIS.");
+      }
+
+      // Auto-scale dinâmico idêntico à tela de Etiquetas
+      const totalChars = avisos.reduce((acc, t) => acc + t.length, 0);
+      let fontSize = 19;
+      let lineH = 25;
+      if (totalChars > 450) {
+        fontSize = 15;
+        lineH = 20;
+      } else if (totalChars > 200) {
+        fontSize = 17;
+        lineH = 23;
       }
 
       ctx.fillStyle = "#000000";
       ctx.textAlign = "center";
-      ctx.font = "bold 20px Arial, sans-serif";
+      ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
 
-      let yPos = 110;
-      const margemTexto = prod.restritivo_0_3_anos ? 1000 : 1140;
+      let yPos = 145;
+      const margemTexto = 840; // Dá o respiro exato para o selo na direita
 
       avisos.forEach((aviso) => {
-        // Quebra automática de linhas longas
         const palavras = aviso.split(" ");
         let linha = "";
         palavras.forEach((palavra) => {
           const teste = linha + palavra + " ";
           if (ctx.measureText(teste).width > margemTexto) {
-            ctx.fillText(linha, canvas.width / 2 - (prod.restritivo_0_3_anos ? 50 : 0), yPos);
+            ctx.fillText(linha, 520, yPos);
             linha = palavra + " ";
-            yPos += 26;
+            yPos += lineH;
           } else {
             linha = teste;
           }
         });
         if (linha) {
-          ctx.fillText(linha, canvas.width / 2 - (prod.restritivo_0_3_anos ? 50 : 0), yPos);
-          yPos += 28;
+          ctx.fillText(linha, 520, yPos);
+          yPos += lineH + 3;
         }
       });
 
       const idadeFormatada = (prod.idade_minima || "3 ANOS").replace(/^\+/, "").trim();
-      ctx.font = "900 22px Arial, sans-serif";
-      ctx.fillText(`INDICADO PARA CRIANÇAS MAIORES DE ${idadeFormatada}.`, canvas.width / 2 - (prod.restritivo_0_3_anos ? 50 : 0), yPos + 10);
-      ctx.font = "bold 18px Arial, sans-serif";
-      ctx.fillText("GUARDAR PARA EVENTUAIS CONSULTAS.", canvas.width / 2 - (prod.restritivo_0_3_anos ? 50 : 0), yPos + 36);
+      ctx.font = `900 ${fontSize + 2}px Arial, Helvetica, sans-serif`;
+      ctx.fillText(`INDICADO PARA CRIANÇAS MAIORES DE ${idadeFormatada}.`, 520, yPos + 6);
+      ctx.font = `bold ${fontSize - 1}px Arial, Helvetica, sans-serif`;
+      ctx.fillText("GUARDAR PARA EVENTUAIS CONSULTAS", 520, yPos + lineH + 6);
 
-      // Selo 0-3 Anos (Círculo vermelho com corte diagonal)
+      // --- SELO 0-3 ANOS (Geometria SVG Oficial com carinha triste, posicionado no 63%) ---
       if (prod.restritivo_0_3_anos) {
-        const cx = 1070;
-        const cy = 200;
-        const r = 65;
+        const cx = 1065;
+        const cy = 370; // 63% do bloco central
+        const r = 70;
 
+        ctx.save();
+        // Círculo Vermelho
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-        ctx.lineWidth = 12;
-        ctx.strokeStyle = "#dc2626";
+        ctx.lineWidth = 13;
+        ctx.strokeStyle = "#DC2626";
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
         ctx.stroke();
 
-        ctx.fillStyle = "#000000";
-        ctx.font = "900 38px Arial, sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText("0-3", cx, cy + 12);
-
-        // Faixa diagonal de proibição
+        // Barra Diagonal Vermelha
         ctx.beginPath();
-        ctx.moveTo(cx - 45, cy - 45);
-        ctx.lineTo(cx + 45, cy + 45);
-        ctx.lineWidth = 10;
-        ctx.strokeStyle = "#dc2626";
+        ctx.moveTo(cx - 48, cy - 48);
+        ctx.lineTo(cx + 48, cy + 48);
+        ctx.lineWidth = 13;
+        ctx.lineCap = "round";
         ctx.stroke();
+
+        // Texto "0-3"
+        ctx.fillStyle = "#000000";
+        ctx.font = "bold 34px Arial, Helvetica, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("0-3", cx - 24, cy + 28);
+
+        // Rostinho do bebê
+        const bx = cx + 30;
+        const by = cy - 20;
+        ctx.beginPath();
+        ctx.arc(bx, by, 22, 0, 2 * Math.PI);
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = "#000000";
+        ctx.stroke();
+
+        // Topete
+        ctx.beginPath();
+        ctx.moveTo(bx - 1.5, by - 22);
+        ctx.bezierCurveTo(bx - 4.5, by - 30, bx + 4.5, by - 30, bx + 1.5, by - 22);
+        ctx.stroke();
+
+        // Olhinhos
+        ctx.beginPath();
+        ctx.arc(bx - 6, by - 3, 2.5, 0, 2 * Math.PI);
+        ctx.arc(bx + 6, by - 3, 2.5, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Nariz em L
+        ctx.beginPath();
+        ctx.moveTo(bx, by - 1);
+        ctx.lineTo(bx, by + 5);
+        ctx.lineTo(bx - 3, by + 5);
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        // Boquinha Triste
+        ctx.beginPath();
+        ctx.arc(bx, by + 16, 7, Math.PI * 1.15, Math.PI * 1.85, false);
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
       }
 
-      // Linha divisória rodapé
-      ctx.beginPath();
-      ctx.moveTo(20, 480);
-      ctx.lineTo(canvas.width - 20, 480);
-      ctx.strokeStyle = "#000000";
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      // --- 3. RODAPÉ EM 3 COLUNAS ALINHADAS ---
+      const footerY = 530;
 
-      // 3. RODAPÉ ESQUERDO: DADOS DO PRODUTO E IMPORTADOR
+      // COLUNA 1: DADOS JURÍDICOS (Esquerda, máx 490px)
       ctx.textAlign = "left";
       ctx.fillStyle = "#000000";
-      ctx.font = "900 22px Arial, sans-serif";
-      ctx.fillText(prod.descricao.substring(0, 50).toUpperCase(), 30, 515);
+      ctx.font = "900 19px Arial, Helvetica, sans-serif";
+      ctx.fillText(prod.descricao.toUpperCase(), 35, footerY);
 
-      ctx.font = "bold 18px Arial, sans-serif";
-      ctx.fillText(`Ref: ${prod.fty_no} | Item: ${prod.fty_no}`, 30, 545);
-      ctx.fillText(`Código de barras: ${prod.ean_13 || "N/A"}`, 30, 573);
-      ctx.fillText(`Importador: ${prod.empresas?.razao_social || "STONE IMPORTADORA"}`, 30, 601);
-      ctx.fillText(`Endereço: ${prod.empresas?.endereco || "Endereço comercial"}`, 30, 629);
-      ctx.fillText(`Fabricação: ${prod.data_fabricacao || "08/2026"} | Lote: ${prod.lote || "08/2026"}`, 30, 657);
-      ctx.fillText(`CNPJ: ${prod.empresas?.cnpj || "00.000.000/0001-00"} | Origem: China`, 30, 685);
-      ctx.fillText(`SAC: ${prod.empresas?.sac_email || "sac@empresa.com.br"}`, 30, 713);
+      ctx.font = "bold 15px Arial, Helvetica, sans-serif";
+      let dy = footerY + 24;
+      ctx.fillText(`Ref: ${prod.referencia_interna || prod.fty_no}   Item: ${prod.fty_no}`, 35, dy);
+      dy += 22;
+      ctx.fillText(`Código de barras: ${prod.ean_13 || "N/A"}`, 35, dy);
+      dy += 22;
+      ctx.fillText(`Importador: ${prod.empresas?.razao_social || "IMPORTADORA"}`, 35, dy);
+      dy += 22;
 
-      // 4. RODAPÉ DIREITO: CÓDIGO DE BARRAS + SELO INMETRO
-      const barcodeCanvas = document.createElement("canvas");
-      const codigoLimpo = (prod.ean_barras || prod.ean_13 || "7890000000000").replace(/["'\s-]/g, "");
-
-      try {
-        JsBarcode(barcodeCanvas, codigoLimpo, {
-          format: "EAN13",
-          displayValue: true,
-          fontSize: 20,
-          height: 60,
-          margin: 0,
+      // Endereço (com quebra inteligente se passar de 480px)
+      ctx.font = "14px Arial, Helvetica, sans-serif";
+      const endTexto = `Endereço: ${prod.empresas?.endereco || "Não informado"}`;
+      if (ctx.measureText(endTexto).width > 480) {
+        const palavrasEnd = endTexto.split(" ");
+        let l1 = "", l2 = "";
+        palavrasEnd.forEach((p) => {
+          if (ctx.measureText(l1 + p + " ").width < 470 && !l2) l1 += p + " ";
+          else l2 += p + " ";
         });
-        ctx.drawImage(barcodeCanvas, 770, 505, 380, 115);
-      } catch (e) {
-        console.error("Erro no barcode:", e);
+        ctx.fillText(l1, 35, dy);
+        dy += 19;
+        ctx.fillText(l2, 35, dy);
+      } else {
+        ctx.fillText(endTexto, 35, dy);
+      }
+      dy += 22;
+
+      ctx.font = "bold 14px Arial, Helvetica, sans-serif";
+      const fabStr = prod.data_fabricacao || `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`;
+      const loteStr = prod.lote || `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`;
+      ctx.fillText(`Fabricação: ${fabStr}`, 35, dy);
+      dy += 20;
+      ctx.fillText(`Lote: ${loteStr}`, 35, dy);
+      dy += 20;
+      ctx.fillText(`CNPJ: ${prod.empresas?.cnpj || ""}`, 35, dy);
+      dy += 20;
+      ctx.fillText("Origem: China", 35, dy);
+      dy += 20;
+      ctx.fillText(`SAC: ${prod.empresas?.sac_email || ""}`, 35, dy);
+
+      // COLUNA 2: CÓDIGO DE BARRAS (Centralizado no Rodapé)
+      if (prod.ean_13) {
+        const barcodeCanvas = document.createElement("canvas");
+        const codigoLimpo = (prod.ean_barras || prod.ean_13).replace(/["'\s-]/g, "");
+        try {
+          JsBarcode(barcodeCanvas, codigoLimpo, {
+            format: "EAN13",
+            displayValue: true,
+            fontSize: 16,
+            height: 48,
+            margin: 0,
+            background: "transparent",
+            lineColor: "#000000",
+          });
+          ctx.drawImage(barcodeCanvas, 545, 620, 275, 105);
+        } catch (e) {
+          console.error("Erro ao gerar barcode:", e);
+        }
       }
 
-      // Bloco do Selo Inmetro / OCP
+      // COLUNA 3: SELO OFICIAL INMETRO / OCP (Direita, 280x200px idêntico à tela)
       if (prod.inmetro_familias) {
-        const bx = 770;
-        const by = 640;
-        const bw = 380;
-        const bh = 135;
+        const ix = 865;
+        const iy = 535;
+        const iw = 295;
+        const ih = 210;
 
-        ctx.strokeStyle = "#000000";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(bx, by, bw, bh);
+        ctx.save();
+        // Moldura arredondada com borda cinza suave (neutral-300)
+        ctx.strokeStyle = "#d4d4d4";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.roundRect(ix, iy, iw, ih, 26);
+        ctx.stroke();
 
-        ctx.font = "bold 16px Arial, sans-serif";
-        ctx.fillText("Segurança", bx + 15, by + 30);
-        ctx.font = "900 24px Arial, sans-serif";
-        ctx.fillText((prod.inmetro_familias.ocp_nome || "BRICS").toUpperCase(), bx + 15, by + 65);
-        ctx.font = "bold 16px Arial, sans-serif";
-        ctx.fillText(`OCP ${prod.inmetro_familias.ocp_numero || "0098"}`, bx + 15, by + 100);
-
-        // Bloco INMETRO à direita
-        ctx.strokeRect(bx + 190, by + 15, 175, 45);
-        ctx.font = "900 24px Arial, sans-serif";
+        // Título Segurança
+        ctx.fillStyle = "#000000";
+        ctx.font = "900 23px Arial, Helvetica, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("INMETRO", bx + 277, by + 46);
+        ctx.fillText("Segurança", ix + iw / 2, iy + 34);
 
-        ctx.font = "900 15px Arial, sans-serif";
-        ctx.fillText(`REGISTRO ${prod.inmetro_familias.numero_registro}`, bx + 277, by + 95);
+        // Sub-bloco BRICS (Lado Esquerdo)
+        const bricsX = ix + 65;
+        ctx.textAlign = "center";
+        ctx.font = "900 28px Arial, Helvetica, sans-serif";
+        ctx.fillText("brics", bricsX, iy + 92);
+
+        // 4 esferas curvas sobre o 'i' da marca BRICS
+        ctx.beginPath();
+        ctx.arc(bricsX - 3.5, iy + 73, 2.2, 0, 2 * Math.PI);
+        ctx.arc(bricsX - 1.5, iy + 70, 2.6, 0, 2 * Math.PI);
+        ctx.arc(bricsX + 1, iy + 68, 3, 0, 2 * Math.PI);
+        ctx.arc(bricsX + 3.5, iy + 71, 2.2, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.font = "bold 13px Arial, Helvetica, sans-serif";
+        ctx.fillText(`OCP ${prod.inmetro_familias.ocp_numero || "0098"}`, bricsX, iy + 115);
+
+        // Sub-bloco INMETRO (Geometria Oficial com Pilares Maciços)
+        const inmx = ix + 175;
+        const inmy = iy + 62;
+        ctx.fillStyle = "#000000";
+        // Barra Superior
+        ctx.fillRect(inmx, inmy, 68, 9);
+        // Barra Inferior
+        ctx.fillRect(inmx, inmy + 48, 68, 9);
+        // Pilar Superior
+        ctx.beginPath();
+        ctx.moveTo(inmx + 22, inmy + 9);
+        ctx.lineTo(inmx + 47, inmy + 9);
+        ctx.lineTo(inmx + 47, inmy + 36);
+        ctx.fill();
+        // Pilar Inferior
+        ctx.beginPath();
+        ctx.moveTo(inmx + 21, inmy + 23);
+        ctx.lineTo(inmx + 21, inmy + 48);
+        ctx.lineTo(inmx + 46, inmy + 48);
+        ctx.fill();
+
+        ctx.font = "900 italic 15px Arial, Helvetica, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("INMETRO", inmx + 34, inmy + 71);
+
+        // Rodapé: REGISTRO + Número
+        ctx.font = "bold 13px Arial, Helvetica, sans-serif";
+        ctx.fillText("REGISTRO", ix + iw / 2, iy + 165);
+        ctx.font = "900 17px Arial, Helvetica, sans-serif";
+        ctx.fillText(prod.inmetro_familias.numero_registro, ix + iw / 2, iy + 188);
+
+        ctx.restore();
       }
 
       canvas.toBlob((blob) => {
@@ -364,8 +502,19 @@ export default function LiquidificadorPage() {
   }
 
   // Função Principal de Processamento do Raio-X & Geração
-  async function processarPlanilha() {
+  async function processarPlanilha(ignorarAvisoRef = false) {
     if (!file) return;
+
+    // Trava de Segurança: Obriga a escolher o Importador da carga
+    if (!empresaSelecionada) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Importador Obrigatório",
+        mensagem: "Por favor, selecione qual Importador é dono desta carga antes de processar a planilha.",
+      });
+      return;
+    }
 
     setLoading(true);
     setStatusMsg("Lendo arquivo Excel enviado...");
@@ -409,24 +558,31 @@ export default function LiquidificadorPage() {
           cellDesc = cellFty;
         }
 
+        // Filtro anti-ruído: ignora linhas de endereço/contato corporativo da fábrica chinesa
+        const termosDescarte = ["ADD:", "TEL:", "FAX:", "ROOM", "STREET", "ROAD", "BUILDING", "EMAIL:"];
+        const ehRuidoCorporativo = cellFty && (
+          cellFty.length > 40 || 
+          termosDescarte.some((termo) => cellFty.toUpperCase().includes(termo))
+        );
+
         // Detecta a linha do cabeçalho oficial de forma flexível (FTY, ITEM, REF, ART, NO, ou termos chineses)
         if (!comecouProdutos) {
           const termosCabecalho = ["FTY", "ITEM", "REF", "ART", "NO.", "MODEL", "品名", "序号"];
-          const ehCabecalho = cellFty && termosCabecalho.some((termo) => cellFty.toUpperCase().includes(termo));
+          const ehCabecalho = cellFty && !ehRuidoCorporativo && termosCabecalho.some((termo) => cellFty.toUpperCase().includes(termo));
           if (ehCabecalho) {
             comecouProdutos = true;
           }
           return;
         }
 
-        // Ignora linhas vazias ou de totalizadores (TOTAL / SUM / TT)
+        // Ignora linhas vazias, totalizadores (TOTAL / SUM / TT) ou rodapés de contato
         const ehTotalizador = cellFty && (
           cellFty.toUpperCase().includes("TOTAL") ||
           cellFty.toUpperCase().includes("SUM") ||
           cellFty.toUpperCase() === "TT"
         );
 
-        if (cellFty && !ehTotalizador) {
+        if (cellFty && !ehTotalizador && !ehRuidoCorporativo) {
           itensPlanilha.push({
             linha: rowNumber,
             fty_no: cellFty,
@@ -446,9 +602,9 @@ export default function LiquidificadorPage() {
         return;
       }
 
-      // 2. Busca todos os produtos no banco que batem com esses códigos
+      // 2. Busca todos os produtos no banco que batem com esses códigos para este importador
       const ftyList = itensPlanilha.map((i) => i.fty_no);
-      const { data: produtosBanco, error: prodError } = await supabase
+      let queryProdutos = supabase
         .from("produtos")
         .select(`
           *,
@@ -456,6 +612,12 @@ export default function LiquidificadorPage() {
           inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero, status, data_validade)
         `)
         .in("fty_no", ftyList);
+
+      if (empresaSelecionada) {
+        queryProdutos = queryProdutos.eq("empresa_id", empresaSelecionada);
+      }
+
+      const { data: produtosBanco, error: prodError } = await queryProdutos;
 
       if (prodError) {
         throw new Error("Erro ao consultar catálogo no banco: " + prodError.message);
@@ -508,11 +670,38 @@ export default function LiquidificadorPage() {
         setModalAviso({
           isOpen: true,
           tipo: "perigo",
-          titulo: "Geração Bloqueada: Risco de Multa",
+          titulo: "Geração Bloqueada: ALERTA",
           mensagem: `Existem ${produtosSemInmetro.length} produto(s) nesta planilha sem Certificado Inmetro válido vinculado:\n\n${produtosSemInmetro.slice(0, 10).join(", ")}${produtosSemInmetro.length > 10 ? `... e mais ${produtosSemInmetro.length - 10} itens` : ""}\n\nVincule a Família Inmetro no Catálogo de Produtos antes de gerar a planilha para a China.`,
         });
         setLoading(false);
         setStatusMsg("");
+        return;
+      }
+
+      // ETAPA 3 DO FUNIL: Controle Interno (Ref. do Importador - Aviso Amigável)
+      const itensSemRef = itensPlanilha.filter(
+        (i) => !produtosMap.get(i.fty_no.trim().toUpperCase())?.referencia_interna
+      );
+
+      if (itensSemRef.length > 0 && ignorarAvisoRef !== true) {
+        setLoading(false);
+        setStatusMsg("");
+        setModalAviso({
+          isOpen: true,
+          tipo: "alerta",
+          titulo: "Produtos sem Ref. do Importador",
+          mensagem: `Identificamos ${itensSemRef.length} produto(s) sem a Referência do Importador.\n\nDeseja ir ao Catálogo preencher ou deseja Gerar Agora mesmo assim usando o código da fábrica?`,
+          textoConfirmar: "Gerar Agora",
+          textoCancelar: "Ir ao Catálogo",
+          onConfirmar: () => {
+            setModalAviso((prev) => ({ ...prev, isOpen: false }));
+            processarPlanilha(true); // Dispara a geração direta!
+          },
+          onCancelar: () => {
+            setModalAviso((prev) => ({ ...prev, isOpen: false }));
+            router.push("/produtos");
+          },
+        });
         return;
       }
 
@@ -570,7 +759,15 @@ export default function LiquidificadorPage() {
       anchor.click();
       window.URL.revokeObjectURL(url);
 
-      setStatusMsg("Planilha gerada e baixada com sucesso!");
+      const semRefContagem = itensPlanilha.filter(
+        (i) => !produtosMap.get(i.fty_no.trim().toUpperCase())?.referencia_interna
+      ).length;
+
+      if (semRefContagem > 0) {
+        setStatusMsg(`Planilha baixada! Aviso: ${semRefContagem} item(ns) sem Ref usaram o código de fábrica.`);
+      } else {
+        setStatusMsg("Planilha gerada e baixada com sucesso!");
+      }
     } catch (err: any) {
       console.error("Erro no processamento do Excel:", err);
       setModalAviso({
@@ -602,8 +799,31 @@ export default function LiquidificadorPage() {
         {/* Painel de Upload e Configuração */}
         <div className="lg:col-span-8 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-6">
           <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">
-            Carregar Planilha do Fornecedor (.xlsx)
+            Configuração da Carga e Planilha (.xlsx)
           </h2>
+
+          {/* 1. SELETOR DE IMPORTADOR DA CARGA */}
+          <div>
+            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+              Importador Dono da Carga *
+            </label>
+            <select
+              value={empresaSelecionada}
+              onChange={(e) => {
+                setEmpresaSelecionada(e.target.value);
+                setEmpresaLote(e.target.value);
+              }}
+              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
+            >
+              <option value="">-- Selecione o Importador Dono da Carga --</option>
+              {empresas.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.razao_social}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate-400 mt-1">Garante que as etiquetas sejam geradas exclusivamente com os dados desta empresa.</p>
+          </div>
 
           {/* Área de Drag & Drop / Seleção de Arquivo */}
           <div className="border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center hover:border-blue-500 transition-colors bg-slate-50/50">
@@ -684,7 +904,7 @@ export default function LiquidificadorPage() {
             </div>
 
             <button
-              onClick={processarPlanilha}
+              onClick={() => processarPlanilha(false)}
               disabled={!file || loading}
               className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-6 py-3 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -744,12 +964,12 @@ export default function LiquidificadorPage() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Cadastrar Itens em 1 Clique</h3>
-                <p className="text-xs text-slate-400">Identificamos {naoCadastrados.length} novos produtos nesta planilha.</p>
+                <p className="text-xs text-slate-600">Identificamos {naoCadastrados.length} novos produtos nesta planilha.</p>
               </div>
             </div>
 
             {/* Painel de Seleção para o Lote */}
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
                   Importador Dono do Lote *
@@ -762,24 +982,6 @@ export default function LiquidificadorPage() {
                   {empresas.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.razao_social}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-                  Família Inmetro (Opcional)
-                </label>
-                <select
-                  value={familiaLote}
-                  onChange={(e) => setFamiliaLote(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:border-blue-500 outline-none font-medium"
-                >
-                  <option value="">Sem Registro Inmetro</option>
-                  {familiasFiltradas.map((fam) => (
-                    <option key={fam.id} value={fam.id}>
-                      {fam.nome_familia}
                     </option>
                   ))}
                 </select>
@@ -839,8 +1041,10 @@ export default function LiquidificadorPage() {
         tipo={modalAviso.tipo}
         titulo={modalAviso.titulo}
         mensagem={modalAviso.mensagem}
+        textoConfirmar={modalAviso.textoConfirmar}
+        textoCancelar={modalAviso.textoCancelar}
         onConfirmar={modalAviso.onConfirmar}
-        onCancelar={() => setModalAviso((prev) => ({ ...prev, isOpen: false }))}
+        onCancelar={modalAviso.onCancelar || (() => setModalAviso((prev) => ({ ...prev, isOpen: false })))}
       />
     </div>
   );

@@ -20,6 +20,7 @@ interface Produto {
   empresa_id: string;
   familia_id: string | null;
   fty_no: string;
+  referencia_interna: string | null;
   descricao: string;
   ean_13: string | null;
   ean_barras: string | null;
@@ -88,6 +89,7 @@ export default function ProdutosPage() {
     empresa_id: "",
     familia_id: "",
     fty_no: "",
+    referencia_interna: "",
     descricao: "",
     ean_13: "",
     ean_barras: "",
@@ -133,6 +135,15 @@ export default function ProdutosPage() {
 
   useEffect(() => {
     carregarDados();
+
+    // Captura o importador vindo pelo clique na Home (?empresa=...)
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const empresaParam = params.get("empresa");
+      if (empresaParam) {
+        setFiltroEmpresa(empresaParam);
+      }
+    }
   }, []);
 
   // Filtra as famílias do Inmetro baseando-se na empresa selecionada
@@ -166,6 +177,7 @@ export default function ProdutosPage() {
       empresa_id: empresas[0]?.id || "",
       familia_id: "",
       fty_no: "",
+      referencia_interna: "",
       descricao: "",
       ean_13: "",
       ean_barras: "",
@@ -189,6 +201,7 @@ export default function ProdutosPage() {
       empresa_id: prod.empresa_id,
       familia_id: prod.familia_id || "",
       fty_no: prod.fty_no,
+      referencia_interna: prod.referencia_interna || "",
       descricao: prod.descricao,
       ean_13: prod.ean_13 || "",
       ean_barras: prod.ean_barras || "",
@@ -253,6 +266,7 @@ export default function ProdutosPage() {
           empresa_id: formData.empresa_id,
           familia_id: formData.familia_id || null,
           fty_no: formData.fty_no,
+          referencia_interna: formData.referencia_interna.trim() || null,
           descricao: formData.descricao,
           ean_13: eanFinal || null,
           ean_barras: formData.ean_barras.trim() || null,
@@ -282,6 +296,7 @@ export default function ProdutosPage() {
           empresa_id: formData.empresa_id,
           familia_id: formData.familia_id || null,
           fty_no: formData.fty_no,
+          referencia_interna: formData.referencia_interna.trim() || null,
           descricao: formData.descricao,
           ean_13: eanFinal,
           ean_barras: formData.ean_barras.trim() || null,
@@ -322,15 +337,20 @@ export default function ProdutosPage() {
     return false;
   });
 
+  // Contagem de produtos sem Referência do Importador
+  const produtosSemRef = produtos.filter((prod) => !prod.referencia_interna);
+
   // Famílias para o select de filtro (se uma empresa estiver filtrada, lista só as dela)
   const familiasParaFiltro = filtroEmpresa
     ? familias.filter((f) => f.empresa_id === filtroEmpresa)
     : familias;
 
-  // Aplicação dos 3 filtros sobre a lista
+  // Aplicação dos filtros sobre a lista
   const produtosExibidos = produtos.filter((prod) => {
     if (filtroEmpresa && prod.empresa_id !== filtroEmpresa) return false;
     if (filtroFamilia && prod.familia_id !== filtroFamilia) return false;
+
+    if (filtroStatus === "sem_ref") return !prod.referencia_interna;
 
     const ehSemRegistro = !prod.familia_id || !prod.inmetro_familias || prod.inmetro_familias.status === "Sem Registro";
     const ehVencido = Boolean(
@@ -392,6 +412,35 @@ export default function ProdutosPage() {
               className="text-xs font-bold text-red-700 bg-red-100/80 hover:bg-red-200 border border-red-200 px-3.5 py-2 rounded-xl transition flex-shrink-0 self-start sm:self-auto"
             >
               Filtrar produtos em risco
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* BANNER DE AVISO: SEM REFERÊNCIA DO IMPORTADOR */}
+      {!loading && produtosSemRef.length > 0 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-200 shadow-[0_2px_12px_rgba(245,158,11,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center space-x-3.5">
+            <div className="p-2.5 bg-amber-100 text-amber-700 rounded-xl border border-amber-200 flex-shrink-0">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-amber-900">
+                {produtosSemRef.length} produto{produtosSemRef.length > 1 ? "s" : ""} sem Referência do Importador (Ref)
+              </h4>
+              <p className="text-xs text-amber-700/80 mt-0.5">
+                Itens sem o código interno da empresa usarão o código da fábrica chinesa como padrão na etiqueta.
+              </p>
+            </div>
+          </div>
+          {filtroStatus !== "sem_ref" && (
+            <button
+              onClick={() => setFiltroStatus("sem_ref")}
+              className="text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-3.5 py-2 rounded-xl transition flex-shrink-0 self-start sm:self-auto"
+            >
+              Filtrar sem Referência
             </button>
           )}
         </div>
@@ -628,7 +677,7 @@ export default function ProdutosPage() {
                 {/* 2. Família Inmetro */}
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Família Inmetro Vinc.
+                    Família Inmetro.
                   </label>
                   <select
                     value={formData.familia_id}
@@ -645,19 +694,34 @@ export default function ProdutosPage() {
                 </div>
               </div>
 
-              {/* 3. Código do Fornecedor */}
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  Código do Fornecedor (FTY NO) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.fty_no}
-                  onChange={(e) => setFormData({ ...formData, fty_no: e.target.value })}
-                  placeholder="Ex: 3117"
-                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono font-semibold"
-                />
+              {/* 3. Códigos: Ref Interna e Código do Fornecedor */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Ref. do Importador
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.referencia_interna}
+                    onChange={(e) => setFormData({ ...formData, referencia_interna: e.target.value })}
+                    placeholder="Ex: STN-080124-24"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Código Fábrica (Item / FTY) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.fty_no}
+                    onChange={(e) => setFormData({ ...formData, fty_no: e.target.value })}
+                    placeholder="Ex: 3117"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono font-semibold"
+                  />
+                </div>
               </div>
 
               {/* 4 e 5. Códigos de Barras Pareados */}
@@ -708,7 +772,7 @@ export default function ProdutosPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Faixa Etária Indicada
+                    Faixa Etária
                   </label>
                   <input
                     type="text"

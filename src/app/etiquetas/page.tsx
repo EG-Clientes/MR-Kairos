@@ -8,6 +8,7 @@ import ModalAviso from "@/components/ModalAviso";
 interface Produto {
   id: string;
   fty_no: string;
+  referencia_interna?: string | null;
   descricao: string;
   ean_13: string | null;
   ean_barras: string | null;
@@ -179,6 +180,16 @@ export default function GeradorEtiquetasPage() {
               <span>Emissão Bloqueada: Inmetro Vencido ou Sem Registro</span>
             </div>
           )}
+
+          {!certificadoInvalido && produtoSelecionado && !produtoSelecionado.referencia_interna && (
+            <div className="flex items-center space-x-2 text-xs text-amber-800 font-medium bg-amber-50 border border-amber-200 px-3.5 py-2 rounded-xl">
+              <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Aviso: Sem Ref do Importador (usando código de fábrica)</span>
+            </div>
+          )}
+
           <button
             onClick={() => window.print()}
             disabled={!produtoSelecionado || certificadoInvalido}
@@ -318,7 +329,7 @@ export default function GeradorEtiquetasPage() {
 
                     {/* Selo Regulamentar 0-3 Anos Idêntico ao Original */}
                     {produtoSelecionado.restritivo_0_3_anos && (
-                      <div className="absolute right-1 top-1/2 -translate-y-1/2 w-14 h-14 flex-shrink-0">
+                      <div className="absolute right-1 top-[63%] -translate-y-1/2 w-14 h-14 flex-shrink-0">
                         <svg className="w-full h-full" viewBox="0 0 100 100">
                           {/* Círculo externo vermelho */}
                           <circle cx="50" cy="50" r="44" stroke="#DC2626" strokeWidth="8" fill="#FFF" />
@@ -350,14 +361,8 @@ export default function GeradorEtiquetasPage() {
                         {produtoSelecionado.descricao}
                       </p>
                       <p>
-                        {produtoSelecionado.fty_no.includes("Item:") ? (
-                          <span className="font-bold">Ref: {produtoSelecionado.fty_no}</span>
-                        ) : (
-                          <>
-                            <span className="font-bold">Ref:</span> {produtoSelecionado.fty_no} &nbsp;&nbsp;
-                            <span className="font-bold">Item:</span> {produtoSelecionado.fty_no}
-                          </>
-                        )}
+                        <span className="font-bold">Ref:</span> {produtoSelecionado.referencia_interna || produtoSelecionado.fty_no} &nbsp;&nbsp;
+                        <span className="font-bold">Item:</span> {produtoSelecionado.fty_no}
                       </p>
                       <p>
                         <span className="font-bold">Código de barras:</span> {produtoSelecionado.ean_13}
