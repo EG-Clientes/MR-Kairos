@@ -126,7 +126,7 @@ export default function CertificadosPage() {
   function handleNovo() {
     setEditingId(null);
     setFormData({
-      empresa_id: empresas[0]?.id || "",
+      empresa_id: "",
       nome_familia: "",
       numero_registro: "",
       data_emissao: "",
@@ -514,6 +514,7 @@ export default function CertificadosPage() {
                   onChange={(e) => setFormData({ ...formData, empresa_id: e.target.value })}
                   className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                 >
+                  <option value="">Selecione o importador...</option>
                   {empresas.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.razao_social}

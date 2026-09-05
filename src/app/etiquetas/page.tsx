@@ -514,18 +514,20 @@ export default function GeradorEtiquetasPage() {
           .print-label, .print-label * {
             visibility: visible !important;
           }
-          /* Destaca a etiqueta do layout do site e cola ela no topo da folha térmica de impressão */
+          /* Centraliza perfeitamente a etiqueta no centro do arquivo/folha de impressão */
           .print-label {
             position: fixed !important;
-            left: 0 !important;
             top: 0 !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            margin: auto !important;
             width: 450px !important;
             height: 300px !important;
             border: none !important;
             box-shadow: none !important;
             background: white !important;
-            padding: 0 !important;
-            margin: 0 !important;
+            padding: 16px !important;
           }
         }
       `}} />

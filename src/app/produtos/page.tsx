@@ -159,13 +159,9 @@ export default function ProdutosPage() {
     // 2. Verifica se a família selecionada atualmente está dentro desta lista filtrada
     const familiaPertenceAEmpresa = filtradas.some((f) => f.id === formData.familia_id);
 
-    // 3. Se não pertencer (ou se a empresa mudou), redireciona o vínculo de forma segura
+    // 3. Se não pertencer (ou se a empresa mudou), mantém limpo como sem registro
     if (!familiaPertenceAEmpresa) {
-      if (filtradas.length > 0) {
-        setFormData((prev) => ({ ...prev, familia_id: filtradas[0].id }));
-      } else {
-        setFormData((prev) => ({ ...prev, familia_id: "" }));
-      }
+      setFormData((prev) => ({ ...prev, familia_id: "" }));
     }
   }, [formData.empresa_id, familias]); // Apenas empresa_id e a lista bruta de familias controlam o ciclo de disparo
 
@@ -174,7 +170,7 @@ export default function ProdutosPage() {
     setEditingId(null);
     const dataAtualString = `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`;
     setFormData({
-      empresa_id: empresas[0]?.id || "",
+      empresa_id: "",
       familia_id: "",
       fty_no: "",
       referencia_interna: "",
@@ -666,6 +662,7 @@ export default function ProdutosPage() {
                     onChange={(e) => setFormData({ ...formData, empresa_id: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
                   >
+                    <option value="">Selecione o importador...</option>
                     {empresas.map((emp) => (
                       <option key={emp.id} value={emp.id}>
                         {emp.razao_social}
