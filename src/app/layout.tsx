@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link"; // Adicionado para navegação SPA sem recarregamento
 import "./globals.css";
+import LayoutShell from "@/components/LayoutShell";
+import LogoutButton from "@/components/LogoutButton";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,9 +20,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={`${inter.className} bg-slate-50 text-slate-800 antialiased`}>
-        <div className="flex min-h-screen">
-          {/* SIDEBAR LATERAL FIXA - DESIGN ULTRA PREMIUM */}
-          <aside className="w-64 bg-slate-950 text-white flex flex-col fixed h-full shadow-[4px_0_24px_rgba(0,0,0,0.3)] border-r border-slate-800/60 z-40">
+        <LayoutShell
+          sidebar={
+            <aside className="w-64 bg-slate-950 text-white flex flex-col fixed h-full shadow-[4px_0_24px_rgba(0,0,0,0.3)] border-r border-slate-800/60 z-40">
             {/* Header da Sidebar com Glow Sutil */}
             <div className="p-5 border-b border-slate-800/80 flex items-center space-x-3.5 bg-gradient-to-r from-blue-900/30 to-transparent">
               <div className="w-11 h-11 rounded-xl bg-slate-900 border border-slate-700/60 flex items-center justify-center p-1.5 shadow-inner flex-shrink-0">
@@ -37,9 +39,9 @@ export default function RootLayout({
             </div>
 
             {/* Links de Navegação */}
-            <nav className="flex-1 px-3 py-6 space-y-2">
+            <nav className="flex-1 px-3 py-6 space-y-2 flex flex-col">
               <Link 
-                href="/" 
+                href="/dashboard" 
                 className="group flex items-center space-x-3.5 px-3.5 py-3 rounded-xl text-slate-300 hover:text-white hover:bg-slate-900/90 transition-all duration-150 text-[15px] font-medium border border-transparent hover:border-slate-800"
               >
                 <div className="p-2 rounded-lg bg-slate-900 text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-150 shadow-sm border border-slate-800">
@@ -109,6 +111,9 @@ export default function RootLayout({
                 </div>
                 <span>Excel</span>
               </Link>
+
+              {/* COLA O BOTÃO AQUI LOGO ABAIXO DO EXCEL: */}
+              <LogoutButton />
             </nav>
 
             {/* Rodapé da Sidebar */}
@@ -120,13 +125,11 @@ export default function RootLayout({
               <span className="text-[11px] font-mono text-slate-500 font-bold bg-slate-900 px-2 py-0.5 rounded border border-slate-800">MR Kairós</span>
             </div>
           </aside>
-
-          {/* CONTEÚDO PRINCIPAL (Fica recuado à direita da sidebar) */}
-          <main className="flex-1 ml-64 p-10">
-            {children}
-          </main>
-        </div>
-      </body>
-    </html>
+        }
+      >
+        {children}
+      </LayoutShell>
+    </body>
+  </html>
   );
 }
