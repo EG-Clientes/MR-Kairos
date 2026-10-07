@@ -384,60 +384,95 @@ export default function ProdutosPage() {
         </button>
       </div>
 
-      {/* BANNER DE ALERTA DE COMPLIANCE */}
-      {!loading && produtosEmRisco.length > 0 && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-red-50/60 border border-red-200 shadow-[0_2px_12px_rgba(239,68,68,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center space-x-3.5">
-            <div className="p-2.5 bg-red-100 text-red-600 rounded-xl border border-red-200/80 flex-shrink-0">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-red-900">
-                {produtosEmRisco.length} produto{produtosEmRisco.length > 1 ? "s" : ""} com pendência de Inmetro
-              </h4>
-              <p className="text-xs text-red-700/80 mt-0.5">
-                Itens sem registro ou com certificado vencido bloqueiam a geração das etiquetas e a exportação para o Excel.
-              </p>
-            </div>
-          </div>
-          {filtroStatus !== "em_risco" && (
-            <button
-              onClick={() => setFiltroStatus("em_risco")}
-              className="text-xs font-bold text-red-700 bg-red-100/80 hover:bg-red-200 border border-red-200 px-3.5 py-2 rounded-xl transition flex-shrink-0 self-start sm:self-auto"
-            >
-              Filtrar produtos em risco
-            </button>
-          )}
-        </div>
-      )}
+      {/* PAINEL DE MONITORAMENTO E DIAGNÓSTICO */}
+      {!loading && (produtosEmRisco.length > 0 || produtosSemRef.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* CARD DE ALERTA: INMETRO */}
+          {produtosEmRisco.length > 0 && (
+            <div className="relative rounded-2xl bg-white border border-red-200/90 shadow-[0_2px_10px_rgba(239,68,68,0.04)] p-4 flex flex-col justify-between gap-3 overflow-hidden">
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500 rounded-l-2xl" />
+              
+              <div className="flex items-start gap-3.5 pl-1.5">
+                <div className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-700 bg-red-50 border border-red-200/70 px-2 py-0.5 rounded-md">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                      Inmetro
+                    </span>
+                    <h4 className="text-xs font-bold text-slate-800">
+                      {produtosEmRisco.length} {produtosEmRisco.length > 1 ? "itens com pendência" : "item com pendência"}
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Produtos sem registro ou vencidos bloqueiam etiquetas e exportação.
+                  </p>
+                </div>
+              </div>
 
-      {/* BANNER DE AVISO: SEM REFERÊNCIA DO IMPORTADOR */}
-      {!loading && produtosSemRef.length > 0 && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-200 shadow-[0_2px_12px_rgba(245,158,11,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center space-x-3.5">
-            <div className="p-2.5 bg-amber-100 text-amber-700 rounded-xl border border-amber-200 flex-shrink-0">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              {filtroStatus !== "em_risco" && (
+                <div className="flex justify-end pt-2 border-t border-slate-100">
+                  <button
+                    onClick={() => setFiltroStatus("em_risco")}
+                    className="group inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 hover:text-red-800 transition py-0.5 px-2 rounded-lg hover:bg-red-50"
+                  >
+                    <span>Ver pendentes</span>
+                    <svg className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
-            <div>
-              <h4 className="text-sm font-bold text-amber-900">
-                {produtosSemRef.length} produto{produtosSemRef.length > 1 ? "s" : ""} sem Referência do Importador (Ref)
-              </h4>
-              <p className="text-xs text-amber-700/80 mt-0.5">
-                Itens sem o código interno da empresa usarão o código da fábrica chinesa como padrão na etiqueta.
-              </p>
+          )}
+
+          {/* CARD DE ALERTA: SEM REFERÊNCIA */}
+          {produtosSemRef.length > 0 && (
+            <div className="relative rounded-2xl bg-white border border-amber-200/90 shadow-[0_2px_10px_rgba(245,158,11,0.04)] p-4 flex flex-col justify-between gap-3 overflow-hidden">
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500 rounded-l-2xl" />
+              
+              <div className="flex items-start gap-3.5 pl-1.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 border border-amber-100">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200/70 px-2 py-0.5 rounded-md">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                      Cadastro
+                    </span>
+                    <h4 className="text-xs font-bold text-slate-800">
+                      {produtosSemRef.length} {produtosSemRef.length > 1 ? "itens sem Referência" : "item sem Referência"}
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Itens sem código interno usarão o código da fábrica chinesa na etiqueta.
+                  </p>
+                </div>
+              </div>
+
+              {filtroStatus !== "sem_ref" && (
+                <div className="flex justify-end pt-2 border-t border-slate-100">
+                  <button
+                    onClick={() => setFiltroStatus("sem_ref")}
+                    className="group inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 hover:text-amber-900 transition py-0.5 px-2 rounded-lg hover:bg-amber-50"
+                  >
+                    <span>Ver itens</span>
+                    <svg className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
-          {filtroStatus !== "sem_ref" && (
-            <button
-              onClick={() => setFiltroStatus("sem_ref")}
-              className="text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-3.5 py-2 rounded-xl transition flex-shrink-0 self-start sm:self-auto"
-            >
-              Filtrar sem Referência
-            </button>
           )}
         </div>
       )}
