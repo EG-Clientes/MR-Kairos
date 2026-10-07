@@ -222,14 +222,14 @@ export default function GeradorEtiquetasPage() {
 
         {/* Linha 2: Seletor de Modo 100% Simétrico + Campo do Termo */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-          <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+          <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 gap-1">
             <button
               type="button"
               onClick={() => setModoEtiqueta("padrao")}
               className={`h-8 px-4 text-xs font-bold rounded-lg transition-all duration-150 ${
                 modoEtiqueta === "padrao"
-                  ? "bg-white text-slate-900 shadow-xs"
-                  : "text-slate-500 hover:text-slate-900"
+                  ? "bg-blue-900 text-white shadow-xs"
+                  : "text-slate-600 hover:text-blue-900"
               }`}
             >
               Modelo Padrão Direto (Com Logotipo)
@@ -239,8 +239,8 @@ export default function GeradorEtiquetasPage() {
               onClick={() => setModoEtiqueta("concessao")}
               className={`h-8 px-4 text-xs font-bold rounded-lg transition-all duration-150 ${
                 modoEtiqueta === "concessao"
-                  ? "bg-white text-slate-900 shadow-xs"
-                  : "text-slate-500 hover:text-slate-900"
+                  ? "bg-sky-500 text-white shadow-xs"
+                  : "text-slate-600 hover:text-sky-600"
               }`}
             >
               Modelo Concessão (Termo Cedido)

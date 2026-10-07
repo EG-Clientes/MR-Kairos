@@ -812,14 +812,14 @@ export default function LiquidificadorPage() {
         </div>
 
         {/* Seletor de Modo 100% Simétrico */}
-        <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+        <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 gap-1">
           <button
             type="button"
             onClick={() => setModoEtiqueta("padrao")}
             className={`h-8 px-4 text-xs font-bold rounded-lg transition-all duration-150 ${
               modoEtiqueta === "padrao"
-                ? "bg-white text-slate-900 shadow-xs"
-                : "text-slate-500 hover:text-slate-900"
+                ? "bg-blue-900 text-white shadow-xs"
+                : "text-slate-600 hover:text-blue-900"
             }`}
           >
             Modelo Padrão Direto (Com Logotipo)
@@ -829,8 +829,8 @@ export default function LiquidificadorPage() {
             onClick={() => setModoEtiqueta("concessao")}
             className={`h-8 px-4 text-xs font-bold rounded-lg transition-all duration-150 ${
               modoEtiqueta === "concessao"
-                ? "bg-white text-slate-900 shadow-xs"
-                : "text-slate-500 hover:text-slate-900"
+                ? "bg-sky-500 text-white shadow-xs"
+                : "text-slate-600 hover:text-sky-600"
             }`}
           >
             Modelo Concessão (Termo Cedido)
@@ -1007,30 +1007,90 @@ export default function LiquidificadorPage() {
           </div>
         </div>
 
-        {/* Card Lateral de Orientações & Compliance */}
+        {/* Cockpit de Conferência do Importador Selecionado */}
         <div className="lg:col-span-4 space-y-4">
-          <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.1)] space-y-4 border border-slate-800">
-            <div className="flex items-center space-x-2 text-blue-400">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <h3 className="text-sm font-bold uppercase tracking-wider">Como funciona</h3>
-            </div>
-            <ul className="text-xs text-slate-300 space-y-2.5 leading-relaxed">
-              <li className="flex items-start space-x-2">
-                <span className="text-blue-400 font-bold">•</span>
-                <span><strong>Fotos preservadas:</strong> As imagens já existentes da China não são apagadas nem corrompidas.</span>
-              </li>
-              <li className="flex items-start space-x-2">
-                <span className="text-blue-400 font-bold">•</span>
-                <span><strong>Raio-X de Segurança:</strong> Se houver produto novo sem cadastro, o sistema avisa na hora para evitar multas.</span>
-              </li>
-              <li className="flex items-start space-x-2">
-                <span className="text-blue-400 font-bold">•</span>
-                <span><strong>Download automático:</strong> Ao concluir, a planilha final é baixada pronta para reenvio à China.</span>
-              </li>
-            </ul>
-          </div>
+          {(() => {
+            const empAtiva = empresas.find((e) => e.id === empresaSelecionada);
+            const totalFamilias = familias.filter((f) => f.empresa_id === empresaSelecionada).length;
+
+            return (
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-5">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center space-x-2">
+                    <span className={`w-2 h-2 rounded-full ${empAtiva ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
+                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Conferência da Carga
+                    </h3>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${empAtiva ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-400"}`}>
+                    {empAtiva ? "Pronto" : "Aguardando"}
+                  </span>
+                </div>
+
+                {empAtiva ? (
+                  <div className="space-y-4">
+                    {/* Identificação do Importador */}
+                    <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200/70 space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Empresa Vinculada
+                      </span>
+                      <p className="text-sm font-extrabold text-slate-900 leading-tight">
+                        {empAtiva.razao_social}
+                      </p>
+                    </div>
+
+                    {/* Resumo de Configuração e Modalidade */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/70">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                          Modalidade
+                        </span>
+                        <p className={`text-xs font-extrabold mt-0.5 ${modoEtiqueta === "padrao" ? "text-blue-900" : "text-sky-600"}`}>
+                          {modoEtiqueta === "padrao" ? "Padrão Direto" : "Concessão"}
+                        </p>
+                      </div>
+
+                      <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/70">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                          Famílias Ativas
+                        </span>
+                        <p className="text-xs font-extrabold text-slate-900 mt-0.5">
+                          {totalFamilias} {totalFamilias === 1 ? "família" : "famílias"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {modoEtiqueta === "concessao" && (
+                      <div className="p-3 bg-sky-50/70 rounded-xl border border-sky-200/80">
+                        <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wider block">
+                          Termo Aplicado na Etiqueta
+                        </span>
+                        <p className="text-xs font-mono font-black text-sky-950 mt-0.5">
+                          TERMO {termoConcessao || "007/2026"}
+                        </p>
+                      </div>
+                    )}
+
+                    <p className="text-[11px] text-slate-400 leading-relaxed pt-1 border-t border-slate-100">
+                      As etiquetas serão carimbadas com as regras e certificados exclusivos desta empresa.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="py-6 text-center space-y-2">
+                    <div className="w-10 h-10 mx-auto rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                    </div>
+                    <p className="text-xs font-semibold text-slate-600">Nenhum importador selecionado</p>
+                    <p className="text-[11px] text-slate-400 max-w-[220px] mx-auto">
+                      Selecione o dono da carga ao lado para checar os dados antes de processar.
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
