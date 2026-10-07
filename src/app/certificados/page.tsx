@@ -160,6 +160,35 @@ export default function CertificadosPage() {
     setIsModalOpen(true);
   }
 
+  // Função para deletar certificado com Card Elegante
+  function handleExcluir(id: string, nome_familia: string) {
+    setModalAviso({
+      isOpen: true,
+      tipo: "perigo",
+      titulo: "Excluir Certificado",
+      mensagem: `Deseja mesmo excluir o certificado da família "${nome_familia}"?\n\nOs produtos vinculados a esse certificado passarão a constar como 'Sem Registro'.`,
+      onConfirmar: async () => {
+        setModalAviso((prev) => ({ ...prev, isOpen: false }));
+        const { error: deleteError } = await supabase
+          .from("inmetro_familias")
+          .delete()
+          .eq("id", id);
+
+        if (deleteError) {
+          setModalAviso({
+            isOpen: true,
+            tipo: "alerta",
+            titulo: "Erro ao Excluir",
+            mensagem: "Não foi possível excluir o certificado. Verifique os vínculos.",
+          });
+        } else {
+          await carregarDados();
+        }
+      },
+    });
+  }
+
+
   // Salvar ou Atualizar
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
