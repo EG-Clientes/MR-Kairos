@@ -34,6 +34,7 @@ interface ProdutoDB {
     numero_registro: string;
     ocp_nome: string | null;
     ocp_numero: string | null;
+    codigo_ocp: string | null;
     status: string | null;
     data_validade: string | null;
   } | null;
@@ -60,8 +61,13 @@ export default function LiquidificadorPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [colunaFty, setColunaFty] = useState<string>("A"); // Padrão da planilha da China
+  const [colunaDescricao, setColunaDescricao] = useState<string>("D"); // Coluna com o nome do produto
   const [colunaEtiqueta, setColunaEtiqueta] = useState<string>("C"); // Padrão da etiqueta
   const [loading, setLoading] = useState(false);
+
+  // Controle das Abas de Modalidade da Carga
+  const [modoEtiqueta, setModoEtiqueta] = useState<"padrao" | "concessao">("padrao");
+  const [termoConcessao, setTermoConcessao] = useState<string>("007/2026");
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [naoCadastrados, setNaoCadastrados] = useState<ItemNaoCadastrado[]>([]);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
@@ -208,19 +214,21 @@ export default function LiquidificadorPage() {
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // --- 1. TOPO: LOGO CENTRALIZADA OU RAZÃO SOCIAL ---
-      if (logoImg) {
-        const maxH = 80;
-        const maxW = 380;
-        const ratio = Math.min(maxW / logoImg.width, maxH / logoImg.height);
-        const lw = logoImg.width * ratio;
-        const lh = logoImg.height * ratio;
-        ctx.drawImage(logoImg, (canvas.width - lw) / 2, 35, lw, lh);
-      } else {
-        ctx.fillStyle = "#000000";
-        ctx.font = "900 38px Arial, sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText(prod.empresas?.razao_social || "IMPORTADORA", canvas.width / 2, 80);
+      // --- 1. TOPO: LOGO CENTRALIZADA (Apenas no Modo Padrão) ---
+      if (modoEtiqueta === "padrao") {
+        if (logoImg) {
+          const maxH = 80;
+          const maxW = 380;
+          const ratio = Math.min(maxW / logoImg.width, maxH / logoImg.height);
+          const lw = logoImg.width * ratio;
+          const lh = logoImg.height * ratio;
+          ctx.drawImage(logoImg, (canvas.width - lw) / 2, 35, lw, lh);
+        } else {
+          ctx.fillStyle = "#000000";
+          ctx.font = "900 38px Arial, sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(prod.empresas?.razao_social || "IMPORTADORA", canvas.width / 2, 80);
+        }
       }
 
       // --- 2. CENTRO: AVISOS LEGAIS + SELO 0-3 DESCE NO 63% ---
@@ -398,6 +406,13 @@ export default function LiquidificadorPage() {
       dy += 20;
       ctx.fillText(`SAC: ${prod.empresas?.sac_email || ""}`, 35, dy);
 
+      // Linha legal do Termo de Concessão (Exclusiva do Modo Concessão)
+      if (modoEtiqueta === "concessao") {
+        dy += 20;
+        ctx.font = "900 13px Arial, Helvetica, sans-serif";
+        ctx.fillText(`CERTIFICADO POR E CONCESSÃO CEDIDA TERMO ${termoConcessao || "007/2026"}`, 35, dy);
+      }
+
       // COLUNA 2: CÓDIGO DE BARRAS (Centralizado no Rodapé)
       if (prod.ean_13) {
         const barcodeCanvas = document.createElement("canvas");
@@ -454,7 +469,10 @@ export default function LiquidificadorPage() {
         ctx.fill();
 
         ctx.font = "bold 13px Arial, Helvetica, sans-serif";
-        ctx.fillText(`OCP ${prod.inmetro_familias.ocp_numero || "0098"}`, bricsX, iy + 115);
+        const textoOcp = prod.inmetro_familias.codigo_ocp 
+          ? prod.inmetro_familias.codigo_ocp 
+          : `OCP ${prod.inmetro_familias.ocp_numero || "0098"}`;
+        ctx.fillText(textoOcp, bricsX, iy + 115);
 
         // Sub-bloco INMETRO (Geometria Oficial com Pilares Maciços)
         const inmx = ix + 175;
@@ -545,13 +563,8 @@ export default function LiquidificadorPage() {
       worksheet.eachRow((row, rowNumber) => {
         const cellFty = row.getCell(colunaFty).text?.trim();
 
-        // Inteligência na Descrição: se a coluna do código for B (planilha chinesa), a descrição é o próprio nome da B
-        let cellDesc = "";
-        if (colunaFty.toUpperCase() === "B") {
-          cellDesc = cellFty || "PRODUTO IMPORTADO";
-        } else {
-          cellDesc = row.getCell("D").text?.trim() || row.getCell("B").text?.trim() || cellFty || "PRODUTO IMPORTADO";
-        }
+        // Captura a descrição diretamente da coluna escolhida pelo usuário
+        let cellDesc = row.getCell(colunaDescricao).text?.trim() || cellFty || "PRODUTO IMPORTADO";
 
         // Se por acaso a descrição capturada for puramente numérica (ex: quantidade de caixa 220), usa o código do produto
         if (cellDesc && /^\d+$/.test(cellDesc) && cellFty) {
@@ -609,7 +622,7 @@ export default function LiquidificadorPage() {
         .select(`
           *,
           empresas(razao_social, cnpj, endereco, sac_email, logo_url),
-          inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero, status, data_validade)
+          inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero, codigo_ocp, status, data_validade)
         `)
         .in("fty_no", ftyList);
 
@@ -728,7 +741,13 @@ export default function LiquidificadorPage() {
         const prod = produtosMap.get(item.fty_no.trim().toUpperCase());
         if (!prod) continue;
 
-        const imgBuffer = await renderizarEtiquetaParaBuffer(prod);
+        // Se o operador preencheu uma descrição específica nesta linha da planilha, usamos ela na etiqueta
+        const prodComDescricaoPlanilha: ProdutoDB = {
+          ...prod,
+          descricao: item.descricao && item.descricao !== "PRODUTO IMPORTADO" ? item.descricao : prod.descricao,
+        };
+
+        const imgBuffer = await renderizarEtiquetaParaBuffer(prodComDescricaoPlanilha);
 
         const imageId = workbook.addImage({
           buffer: imgBuffer,
@@ -784,12 +803,38 @@ export default function LiquidificadorPage() {
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       {/* Cabeçalho */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/60">
+      <div className="pb-3 border-b border-slate-200/60 space-y-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Importador de Excel</h1>
           <p className="text-slate-500 text-sm mt-1">
             Processe a planilha e receba o arquivo com todas as etiquetas embutidas.
           </p>
+        </div>
+
+        {/* Seletor de Modo 100% Simétrico */}
+        <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+          <button
+            type="button"
+            onClick={() => setModoEtiqueta("padrao")}
+            className={`h-8 px-4 text-xs font-bold rounded-lg transition-all duration-150 ${
+              modoEtiqueta === "padrao"
+                ? "bg-white text-slate-900 shadow-xs"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            Modelo Padrão Direto (Com Logotipo)
+          </button>
+          <button
+            type="button"
+            onClick={() => setModoEtiqueta("concessao")}
+            className={`h-8 px-4 text-xs font-bold rounded-lg transition-all duration-150 ${
+              modoEtiqueta === "concessao"
+                ? "bg-white text-slate-900 shadow-xs"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            Modelo Concessão (Termo Cedido)
+          </button>
         </div>
       </div>
 
@@ -803,26 +848,45 @@ export default function LiquidificadorPage() {
           </h2>
 
           {/* 1. SELETOR DE IMPORTADOR DA CARGA */}
-          <div>
-            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-              Importador Dono da Carga *
-            </label>
-            <select
-              value={empresaSelecionada}
-              onChange={(e) => {
-                setEmpresaSelecionada(e.target.value);
-                setEmpresaLote(e.target.value);
-              }}
-              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
-            >
-              <option value="">-- Selecione o Importador Dono da Carga --</option>
-              {empresas.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.razao_social}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-slate-400 mt-1">Garante que as etiquetas sejam geradas exclusivamente com os dados desta empresa.</p>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                Importador Dono da Carga *
+              </label>
+              <select
+                value={empresaSelecionada}
+                onChange={(e) => {
+                  setEmpresaSelecionada(e.target.value);
+                  setEmpresaLote(e.target.value);
+                }}
+                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
+              >
+                <option value="">-- Selecione o Importador Dono da Carga --</option>
+                {empresas.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.razao_social}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-400 mt-1">Garante que as etiquetas sejam geradas exclusivamente com os dados desta empresa.</p>
+            </div>
+
+            {/* Campo do Termo de Concessão (Exclusivo do Modo Concessão) */}
+            {modoEtiqueta === "concessao" && (
+              <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1">
+                <label className="block text-xs font-bold text-blue-900 uppercase tracking-wider">
+                  Nº do Termo de Concessão Cedida *
+                </label>
+                <input
+                  type="text"
+                  value={termoConcessao}
+                  onChange={(e) => setTermoConcessao(e.target.value)}
+                  placeholder="Ex: 007/2026"
+                  className="w-full px-3 py-2 border border-blue-300 rounded-lg text-sm bg-white text-blue-900 font-mono font-bold focus:border-blue-600 outline-none"
+                />
+                <p className="text-[11px] text-blue-700/80">Este termo será carimbado em todas as etiquetas geradas nesta planilha.</p>
+              </div>
+            )}
           </div>
 
           {/* Área de Drag & Drop / Seleção de Arquivo */}
@@ -854,11 +918,11 @@ export default function LiquidificadorPage() {
             </label>
           </div>
 
-          {/* Seletores de Colunas */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          {/* Seletores de Colunas (Grid em 3 colunas agora) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
             <div>
               <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Coluna do Código (FTY NO) *
+                Coluna do Código (FTY) *
               </label>
               <select
                 value={colunaFty}
@@ -871,12 +935,30 @@ export default function LiquidificadorPage() {
                   </option>
                 ))}
               </select>
-              <p className="text-[11px] text-slate-400 mt-1">Onde está o código do produto na planilha original.</p>
+              <p className="text-[11px] text-slate-400 mt-1">Código do produto na planilha original.</p>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Coluna para Colar a Etiqueta *
+                Coluna da Descrição (Nome) *
+              </label>
+              <select
+                value={colunaDescricao}
+                onChange={(e) => setColunaDescricao(e.target.value)}
+                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
+              >
+                {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"].map((col) => (
+                  <option key={col} value={col}>
+                    Coluna {col}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-400 mt-1">Nome em português digitado na planilha.</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                Coluna da Etiqueta *
               </label>
               <select
                 value={colunaEtiqueta}

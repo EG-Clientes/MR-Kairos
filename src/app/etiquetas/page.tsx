@@ -32,6 +32,7 @@ interface Produto {
     numero_registro: string;
     ocp_nome: string | null;
     ocp_numero: string | null;
+    codigo_ocp: string | null;
     status: string | null;
     data_validade: string | null;
   } | null;
@@ -42,6 +43,10 @@ export default function GeradorEtiquetasPage() {
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState<string>(""); // Campo de busca instantânea
+
+  // Controle das Abas de Modalidade
+  const [modoEtiqueta, setModoEtiqueta] = useState<"padrao" | "concessao">("padrao");
+  const [termoConcessao, setTermoConcessao] = useState<string>("007/2026");
 
   // Estado do Modal Bonitão
   const [modalAviso, setModalAviso] = useState<{
@@ -87,7 +92,7 @@ export default function GeradorEtiquetasPage() {
       .select(`
         *,
         empresas(razao_social, cnpj, endereco, sac_email, logo_url),
-        inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero, status, data_validade)
+        inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero, codigo_ocp, status, data_validade)
       `)
       .order("descricao");
 
@@ -113,6 +118,15 @@ export default function GeradorEtiquetasPage() {
         "ATENÇÃO! NÃO RECOMENDÁVEL PARA CRIANÇAS MENORES DE 3 (TRÊS) ANOS POR CONTER PARTE(S) PEQUENA(S) QUE PODEM SER ENGOLIDA(S) OU ASPIRADA(S)."
       );
     }
+
+    // Se o produto for lançador/arma/projétil (detectado por descrição ou flag)
+    const ehProjetil = /LANÇADOR|LANÇADORA|PISTOLA|ARMA|PROJETIL|PROJÉTIL/i.test(prod.descricao);
+    if (ehProjetil) {
+      textos.push(
+        "ATENÇÃO! NÃO APONTAR PARA OS OLHOS E PARA A FACE. NÃO UTILIZAR PROJÉTEIS DIFERENTES DOS PROVIDOS E DOS INDICADOS PELO FABRICANTE DO BRINQUEDO."
+      );
+    }
+
     if (prod.metal) {
       textos.push(
         "ATENÇÃO! ESTA EMBALAGEM CONTÉM FECHOS METÁLICOS. RETIRAR O BRINQUEDO DA EMBALAGEM ANTES DE ENTREGAR À CRIANÇA."
@@ -164,42 +178,87 @@ export default function GeradorEtiquetasPage() {
   return (
     <div className="space-y-8 max-w-7xl mx-auto print:p-0 print:m-0 print:max-w-none">
       {/* Cabeçalho de Controle - Ocultado na Impressão */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/60 print:hidden">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Etiquetas</h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Selecione o item para pré-visualizar a etiqueta térmica de compliance em 10x15cm.
-          </p>
+      <div className="pb-3 border-b border-slate-200/60 print:hidden space-y-4">
+        {/* Linha 1: Título e Ações Principais (Imprimir / Alertas) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Etiquetas</h1>
+            <p className="text-slate-500 text-sm mt-1">
+              Selecione o item para pré-visualizar a etiqueta térmica de compliance em 10×15cm.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {certificadoInvalido && produtoSelecionado && (
+              <div className="flex items-center space-x-2 text-xs text-red-700 font-semibold bg-red-50 border border-red-200 px-3.5 py-2 rounded-xl">
+                <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>Emissão Bloqueada: Inmetro Vencido ou Sem Registro</span>
+              </div>
+            )}
+
+            {!certificadoInvalido && produtoSelecionado && !produtoSelecionado.referencia_interna && (
+              <div className="flex items-center space-x-2 text-xs text-amber-800 font-medium bg-amber-50 border border-amber-200 px-3.5 py-2 rounded-xl">
+                <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Aviso: Sem Ref do Importador</span>
+              </div>
+            )}
+
+            <button
+              onClick={() => window.print()}
+              disabled={!produtoSelecionado || certificadoInvalido}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              <span>Imprimir Etiqueta</span>
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {certificadoInvalido && produtoSelecionado && (
-            <div className="flex items-center space-x-2 text-xs text-red-700 font-semibold bg-red-50 border border-red-200 px-3.5 py-2 rounded-xl">
-              <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <span>Emissão Bloqueada: Inmetro Vencido ou Sem Registro</span>
+
+        {/* Linha 2: Seletor de Modo 100% Simétrico + Campo do Termo */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+            <button
+              type="button"
+              onClick={() => setModoEtiqueta("padrao")}
+              className={`h-8 px-4 text-xs font-bold rounded-lg transition-all duration-150 ${
+                modoEtiqueta === "padrao"
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Modelo Padrão Direto (Com Logotipo)
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoEtiqueta("concessao")}
+              className={`h-8 px-4 text-xs font-bold rounded-lg transition-all duration-150 ${
+                modoEtiqueta === "concessao"
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              Modelo Concessão (Termo Cedido)
+            </button>
+          </div>
+
+          {modoEtiqueta === "concessao" && (
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+              <span className="text-xs font-bold text-slate-700">Nº do Termo Cedido:</span>
+              <input
+                type="text"
+                value={termoConcessao}
+                onChange={(e) => setTermoConcessao(e.target.value)}
+                placeholder="Ex: 007/2026"
+                className="w-24 px-2 py-0.5 text-xs font-mono font-bold bg-white border border-slate-300 rounded-md outline-none text-slate-900 focus:border-blue-500"
+              />
             </div>
           )}
-
-          {!certificadoInvalido && produtoSelecionado && !produtoSelecionado.referencia_interna && (
-            <div className="flex items-center space-x-2 text-xs text-amber-800 font-medium bg-amber-50 border border-amber-200 px-3.5 py-2 rounded-xl">
-              <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Aviso: Sem Ref do Importador (usando código de fábrica)</span>
-            </div>
-          )}
-
-          <button
-            onClick={() => window.print()}
-            disabled={!produtoSelecionado || certificadoInvalido}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
-            <span>Imprimir Etiqueta</span>
-          </button>
         </div>
       </div>
 
@@ -298,19 +357,21 @@ export default function GeradorEtiquetasPage() {
                 {/* A ETIQUETA REAL (Desenhada idêntica ao PowerPoint) */}
                 <div className="print-label w-[450px] h-[300px] bg-white p-4 flex flex-col justify-between text-[10px] text-black leading-tight select-none shadow-sm print:shadow-none print:border-none">
                   
-                  {/* Header: Logo do Importador Centralizado */}
-                  <div className="flex flex-col items-center">
-                    {produtoSelecionado.empresas?.logo_url ? (
-                      <img
-                        src={produtoSelecionado.empresas.logo_url}
-                        alt="Logo"
-                        className="h-8 object-contain"
-                      />
-                    ) : (
-                      <span className="font-bold text-base text-black tracking-wider">
-                        {produtoSelecionado.empresas?.razao_social}
-                      </span>
-                    )}
+                  {/* Header: Mantém a altura física exata de 32px (h-8) em ambos os modos para ZERO distorção */}
+                  <div className="flex flex-col items-center justify-center h-8">
+                    {modoEtiqueta === "padrao" ? (
+                      produtoSelecionado.empresas?.logo_url ? (
+                        <img
+                          src={produtoSelecionado.empresas.logo_url}
+                          alt="Logo"
+                          className="h-8 object-contain"
+                        />
+                      ) : (
+                        <span className="font-bold text-base text-black tracking-wider">
+                          {produtoSelecionado.empresas?.razao_social}
+                        </span>
+                      )
+                    ) : null}
                   </div>
 
                   {/* Bloco do Meio: Avisos Legais Centralizados + Selo Etário 0-3 à Direita */}
@@ -394,6 +455,11 @@ export default function GeradorEtiquetasPage() {
                       <p>
                         <span className="font-bold">SAC:</span> {produtoSelecionado.empresas?.sac_email}
                       </p>
+                      {modoEtiqueta === "concessao" && (
+                        <p className="font-bold tracking-tight text-[6.5px] uppercase pt-0.5">
+                          CERTIFICADO POR E CONCESSÃO CEDIDA TERMO {termoConcessao || "007/2026"}
+                        </p>
+                      )}
                     </div>
 
                     {/* Coluna 2: Código de Barras EAN-13 Centralizado */}
@@ -438,7 +504,9 @@ export default function GeradorEtiquetasPage() {
                                 <span className="font-bold text-[11px] text-black tracking-tighter">cs</span>
                               </div>
                               <span className="text-[5.5px] font-bold text-black tracking-tight mt-0.5 whitespace-nowrap">
-                                OCP {produtoSelecionado.inmetro_familias.ocp_numero || "0098"}
+                                {produtoSelecionado.inmetro_familias.codigo_ocp 
+                                  ? produtoSelecionado.inmetro_familias.codigo_ocp 
+                                  : `OCP ${produtoSelecionado.inmetro_familias.ocp_numero || "0098"}`}
                               </span>
                             </div>
 

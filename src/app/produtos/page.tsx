@@ -551,8 +551,14 @@ export default function ProdutosPage() {
               <tbody className="divide-y divide-slate-100 text-sm">
                 {produtosExibidos.map((prod) => (
                   <tr key={prod.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-4 px-6 font-semibold text-slate-800">
-                      {prod.empresas?.razao_social || "Não vinculado"}
+                    <td className="py-3.5 px-6 whitespace-nowrap">
+                      {prod.empresas?.razao_social ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 tracking-wide uppercase">
+                          {prod.empresas.razao_social.trim().split(" ")[0]}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">Não vinculado</span>
+                      )}
                     </td>
                     <td className="py-4 px-6 font-mono text-xs font-bold text-blue-600">
                       <span className="bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md">
@@ -560,7 +566,9 @@ export default function ProdutosPage() {
                       </span>
                     </td>
                     <td className="py-4 px-6 font-mono text-slate-500 text-xs">{prod.ean_13 || "Sem EAN"}</td>
-                    <td className="py-4 px-6 text-slate-700 font-medium">{prod.descricao}</td>
+                    <td className="py-3.5 px-6 text-slate-700 font-medium max-w-[280px] truncate" title={prod.descricao}>
+                      {prod.descricao}
+                    </td>
                     <td className="py-4 px-6 text-slate-500 text-xs">
                       {prod.inmetro_familias?.nome_familia ? (
                         <span className="font-medium text-slate-700">{prod.inmetro_familias.nome_familia}</span>
@@ -629,257 +637,265 @@ export default function ProdutosPage() {
 
       {/* MODAL DE CADASTRO / EDIÇÃO */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-lg w-full p-6 space-y-5 overflow-y-auto max-h-[90vh] animate-in fade-in zoom-in duration-150">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full p-6 space-y-5 overflow-y-auto max-h-[92vh] animate-in fade-in zoom-in duration-150">
+            {/* Header com destaque */}
             <div className="flex justify-between items-center border-b border-slate-100 pb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">
+                <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">
                   {editingId ? "Editar Produto" : "Novo Produto"}
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">Cadastre o item com seus parâmetros de compliance.</p>
+                <p className="text-xs text-slate-500 mt-0.5">Defina os parâmetros cadastrais e as regras de compliance alfandegário.</p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-50 transition">
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-700 p-2 rounded-xl hover:bg-slate-100 transition">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium">{error}</div>
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-semibold">{error}</div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* 1. Importador */}
+              {/* SEÇÃO 1: REGULATÓRIO & CÓDIGOS CHAVE */}
+              <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-3.5">
+                <span className="text-[11px] font-extrabold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                  1. Vínculo Regulatório & Códigos
+                </span>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Importador Responsável *
+                    </label>
+                    <select
+                      required
+                      value={formData.empresa_id}
+                      onChange={(e) => setFormData({ ...formData, empresa_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-900 font-medium focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition"
+                    >
+                      <option value="">Selecione o importador...</option>
+                      {empresas.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.razao_social}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Família Certificada (Inmetro)
+                    </label>
+                    <select
+                      value={formData.familia_id}
+                      onChange={(e) => setFormData({ ...formData, familia_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-900 font-medium focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition"
+                    >
+                      <option value="">Sem Registro (Opcional)</option>
+                      {familiasFiltradas.map((fam) => (
+                        <option key={fam.id} value={fam.id}>
+                          {fam.nome_familia}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Código da Fábrica (Item / FTY NO) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.fty_no}
+                      onChange={(e) => setFormData({ ...formData, fty_no: e.target.value })}
+                      placeholder="Ex: 3117"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition font-mono font-bold bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Ref. do Importador (Inmetro / Interna)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.referencia_interna}
+                      onChange={(e) => setFormData({ ...formData, referencia_interna: e.target.value })}
+                      placeholder="Ex: STN-080124-24"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition font-mono font-semibold bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SEÇÃO 2: DADOS DO PRODUTO & ETIQUETAGEM */}
+              <div className="space-y-3.5">
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Importador *
+                  <label className="block text-xs font-bold text-slate-900 mb-1">
+                    Descrição Comercial (Nome na Etiqueta) *
                   </label>
-                  <select
+                  <input
+                    type="text"
                     required
-                    value={formData.empresa_id}
-                    onChange={(e) => setFormData({ ...formData, empresa_id: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
-                  >
-                    <option value="">Selecione o importador...</option>
-                    {empresas.map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.razao_social}
-                      </option>
-                    ))}
-                  </select>
+                    value={formData.descricao}
+                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                    placeholder="Ex: BONECA SEREIA COM LUZ"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition font-bold"
+                  />
                 </div>
 
-                {/* 2. Família Inmetro */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Família Inmetro.
-                  </label>
-                  <select
-                    value={formData.familia_id}
-                    onChange={(e) => setFormData({ ...formData, familia_id: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
-                  >
-                    <option value="">Sem Registro (Opcional)</option>
-                    {familiasFiltradas.map((fam) => (
-                      <option key={fam.id} value={fam.id}>
-                        {fam.nome_familia}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Código de Barras EAN-13 (Brasil)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.ean_13}
+                      onChange={(e) => setFormData({ ...formData, ean_13: e.target.value })}
+                      placeholder="Deixe vazio para gerar automaticamente"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Código Exterior (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.ean_barras}
+                      onChange={(e) => setFormData({ ...formData, ean_barras: e.target.value })}
+                      placeholder="Opcional"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Faixa Etária
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.idade_minima || ""}
+                      onChange={(e) => setFormData({ ...formData, idade_minima: e.target.value })}
+                      placeholder="Ex: 3 anos"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 outline-none font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Data Fabricação
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.data_fabricacao}
+                      onChange={(e) => setFormData({ ...formData, data_fabricacao: e.target.value })}
+                      placeholder="MM/AAAA"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 outline-none font-mono font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Lote
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.lote}
+                      onChange={(e) => setFormData({ ...formData, lote: e.target.value })}
+                      placeholder="MM/AAAA"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 outline-none font-mono font-medium"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* 3. Códigos: Ref Interna e Código do Fornecedor */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Ref. do Importador
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.referencia_interna}
-                    onChange={(e) => setFormData({ ...formData, referencia_interna: e.target.value })}
-                    placeholder="Ex: STN-080124-24"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Código Fábrica (Item / FTY) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.fty_no}
-                    onChange={(e) => setFormData({ ...formData, fty_no: e.target.value })}
-                    placeholder="Ex: 3117"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono font-semibold"
-                  />
-                </div>
-              </div>
-
-              {/* 4 e 5. Códigos de Barras Pareados */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Código de Barras (Brasil)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.ean_13}
-                    onChange={(e) => setFormData({ ...formData, ean_13: e.target.value })}
-                    placeholder="automático"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Código de Barras (Exterior)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.ean_barras}
-                    onChange={(e) => setFormData({ ...formData, ean_barras: e.target.value })}
-                    placeholder="pode ficar vazio"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* 6. Descrição */}
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  Descrição Comercial do Produto *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.descricao}
-                  onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                  placeholder="Ex: BONECA SEREIA COM LUZ"
-                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-medium"
-                />
-              </div>
-
-              {/* 7, 8 e 9. Faixa Etária, Data Fabricação e Lote */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Faixa Etária
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.idade_minima || ""}
-                    onChange={(e) => setFormData({ ...formData, idade_minima: e.target.value })}
-                    placeholder="Ex: +3 anos"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Data de Fabricação
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.data_fabricacao}
-                    onChange={(e) => setFormData({ ...formData, data_fabricacao: e.target.value })}
-                    placeholder="Ex: 08/2026"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Lote de Importação
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.lote}
-                    onChange={(e) => setFormData({ ...formData, lote: e.target.value })}
-                    placeholder="Ex: 08/2026"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
-                  />
-                </div>
-              </div>
-
-              {/* 10. SINALIZADORES DE SEGURANÇA */}
-              <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-3">
-                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Sinalizadores de Segurança (Avisos Legais Obrigatórios)
-                </h4>
+              {/* SEÇÃO 3: SINALIZADORES DE SEGURANÇA JURÍDICA */}
+              <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200/80 space-y-3">
+                <span className="text-[11px] font-extrabold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-600"></span>
+                  2. Avisos Legais de Segurança Obrigatórios
+                </span>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="flex items-center space-x-2.5 text-slate-700 text-sm cursor-pointer hover:text-slate-950">
+                  <label className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-amber-100 hover:border-amber-300 transition">
                     <input
                       type="checkbox"
                       checked={formData.usa_pilha}
                       onChange={(e) => setFormData({ ...formData, usa_pilha: e.target.checked })}
-                      className="rounded-md text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
                     />
-                    <span className="font-medium">Contém Pilha / Bateria</span>
+                    <span>Contém Pilha / Bateria</span>
                   </label>
 
-                  <label className="flex items-center space-x-2.5 text-slate-700 text-sm cursor-pointer hover:text-slate-950">
+                  <label className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-amber-100 hover:border-amber-300 transition">
                     <input
                       type="checkbox"
                       checked={formData.contem_ima}
                       onChange={(e) => setFormData({ ...formData, contem_ima: e.target.checked })}
-                      className="rounded-md text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
                     />
-                    <span className="font-medium">Contém Ímã</span>
+                    <span>Contém Ímã</span>
                   </label>
 
-                  <label className="flex items-center space-x-2.5 text-slate-700 text-sm cursor-pointer hover:text-slate-950">
+                  <label className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-amber-100 hover:border-amber-300 transition">
                     <input
                       type="checkbox"
                       checked={formData.partes_pequenas}
                       onChange={(e) => setFormData({ ...formData, partes_pequenas: e.target.checked })}
-                      className="rounded-md text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
                     />
-                    <span className="font-medium">Contém Partes Pequenas</span>
+                    <span>Contém Partes Pequenas</span>
                   </label>
 
-                  <label className="flex items-center space-x-2.5 text-slate-700 text-sm cursor-pointer hover:text-slate-950">
+                  <label className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-amber-100 hover:border-amber-300 transition">
                     <input
                       type="checkbox"
                       checked={formData.metal}
                       onChange={(e) => setFormData({ ...formData, metal: e.target.checked })}
-                      className="rounded-md text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
                     />
-                    <span className="font-medium">Contém Fechos Metálicos</span>
+                    <span>Contém Fechos Metálicos</span>
                   </label>
 
-                  <label className="flex items-center space-x-2.5 text-slate-700 text-sm cursor-pointer hover:text-slate-950 col-span-1 sm:col-span-2 border-t border-slate-200/80 pt-2.5 mt-1">
+                  <label className="flex items-center space-x-2.5 text-rose-900 text-xs font-bold cursor-pointer select-none bg-rose-50/80 p-2.5 rounded-xl border border-rose-200 col-span-1 sm:col-span-2">
                     <input
                       type="checkbox"
                       checked={formData.restritivo_0_3_anos}
                       onChange={(e) => setFormData({ ...formData, restritivo_0_3_anos: e.target.checked })}
-                      className="rounded-md text-rose-600 focus:ring-rose-500 h-4 w-4"
+                      className="rounded text-rose-600 focus:ring-rose-500 h-4 w-4"
                     />
-                    <span className="text-rose-700 font-semibold text-xs">Restritivo para menores de 3 anos (Selo 0-3 Obrigatório)</span>
+                    <span>Restritivo para menores de 3 anos (Exibe Selo Gráfico 0-3)</span>
                   </label>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+              {/* Botões de Ação */}
+              <div className="pt-3 border-t border-slate-100 flex justify-end space-x-3">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+                  className="px-5 py-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm hover:shadow transition disabled:opacity-50"
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-sm hover:shadow-md transition disabled:opacity-50"
                 >
-                  {saving ? "Salvando..." : "Salvar"}
+                  {saving ? "Salvando..." : "Salvar Produto"}
                 </button>
               </div>
             </form>

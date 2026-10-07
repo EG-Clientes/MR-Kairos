@@ -52,8 +52,9 @@ interface Certificado {
   data_emissao: string;
   data_validade: string;
   status: string;
-  ocp_nome: string | null;   // Adicionado aqui
-  ocp_numero: string | null; // Adicionado aqui
+  ocp_nome: string | null;
+  ocp_numero: string | null;
+  codigo_ocp: string | null;
   empresas: { razao_social: string } | null;
 }
 
@@ -88,8 +89,9 @@ export default function CertificadosPage() {
     data_emissao: "",
     data_validade: "",
     status: "Ativo",
-    ocp_nome: "brics",    // Adicionado aqui com valor padrão
-    ocp_numero: "0098",   // Adicionado aqui com valor padrão
+    ocp_nome: "brics",
+    ocp_numero: "0098",
+    codigo_ocp: "",
   });
 
   async function carregarDados() {
@@ -132,8 +134,9 @@ export default function CertificadosPage() {
       data_emissao: "",
       data_validade: "",
       status: "Ativo",
-      ocp_nome: "brics",    // Adicionado aqui
-      ocp_numero: "0098",   // Adicionado aqui
+      ocp_nome: "brics",
+      ocp_numero: "0098",
+      codigo_ocp: "",
     });
     setError(null);
     setIsModalOpen(true);
@@ -149,39 +152,12 @@ export default function CertificadosPage() {
       data_emissao: cert.data_emissao,
       data_validade: cert.data_validade,
       status: cert.status,
-      ocp_nome: cert.ocp_nome || "brics",    // Adicionado aqui
-      ocp_numero: cert.ocp_numero || "0098", // Adicionado aqui
+      ocp_nome: cert.ocp_nome || "brics",
+      ocp_numero: cert.ocp_numero || "0098",
+      codigo_ocp: cert.codigo_ocp || "",
     });
     setError(null);
     setIsModalOpen(true);
-  }
-
-  // Função para deletar certificado com Card Elegante
-  function handleExcluir(id: string, nome_familia: string) {
-    setModalAviso({
-      isOpen: true,
-      tipo: "perigo",
-      titulo: "Excluir Certificado",
-      mensagem: `Deseja mesmo excluir o certificado da família "${nome_familia}"?\n\nOs produtos vinculados a esse certificado passarão a constar como 'Sem Registro'.`,
-      onConfirmar: async () => {
-        setModalAviso((prev) => ({ ...prev, isOpen: false }));
-        const { error: deleteError } = await supabase
-          .from("inmetro_familias")
-          .delete()
-          .eq("id", id);
-
-        if (deleteError) {
-          setModalAviso({
-            isOpen: true,
-            tipo: "alerta",
-            titulo: "Erro ao Excluir",
-            mensagem: "Não foi possível excluir o certificado. Verifique os vínculos.",
-          });
-        } else {
-          await carregarDados();
-        }
-      },
-    });
   }
 
   // Salvar ou Atualizar
@@ -190,20 +166,23 @@ export default function CertificadosPage() {
     setSaving(true);
     setError(null);
 
+    const payload = {
+      empresa_id: formData.empresa_id,
+      nome_familia: formData.nome_familia,
+      numero_registro: formData.numero_registro,
+      data_emissao: formData.data_emissao,
+      data_validade: formData.data_validade,
+      status: formData.status,
+      ocp_nome: formData.ocp_nome ? formData.ocp_nome.trim() : null,
+      ocp_numero: formData.ocp_numero ? formData.ocp_numero.trim() : null,
+      codigo_ocp: formData.codigo_ocp ? formData.codigo_ocp.trim() : null,
+    };
+
     if (editingId) {
       // MODO EDICAO
       const { error: updateError } = await supabase
         .from("inmetro_familias")
-        .update({
-          empresa_id: formData.empresa_id,
-          nome_familia: formData.nome_familia,
-          numero_registro: formData.numero_registro,
-          data_emissao: formData.data_emissao,
-          data_validade: formData.data_validade,
-          status: formData.status,
-          ocp_nome: formData.ocp_nome.trim() || null,     // Adicionado aqui
-          ocp_numero: formData.ocp_numero.trim() || null, // Adicionado aqui
-        })
+        .update(payload)
         .eq("id", editingId);
 
       if (updateError) {
@@ -218,7 +197,7 @@ export default function CertificadosPage() {
       // MODO CADASTRO
       const { error: insertError } = await supabase
         .from("inmetro_familias")
-        .insert([formData]);
+        .insert([payload]);
 
       if (insertError) {
         setError("Erro ao cadastrar certificado. Verifique os dados.");
@@ -482,163 +461,191 @@ export default function CertificadosPage() {
 
       {/* MODAL DE CADASTRO / EDIÇÃO */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-lg w-full p-6 space-y-6 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full p-6 space-y-5 overflow-y-auto max-h-[92vh] animate-in fade-in zoom-in duration-150">
+            {/* Header com destaque */}
             <div className="flex justify-between items-center border-b border-slate-100 pb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">
-                  {editingId ? "Editar Certificado" : "Novo Certificado"}
+                <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">
+                  {editingId ? "Editar Certificado" : "Novo Certificado Inmetro"}
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">Vincule a família de produtos ao registro do Inmetro.</p>
+                <p className="text-xs text-slate-500 mt-0.5">Cadastre a família regulatória e monitore a validade jurídica.</p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-50 transition">
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-700 p-2 rounded-xl hover:bg-slate-100 transition">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
               {error && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium">{error}</div>
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-semibold">{error}</div>
               )}
 
-              {/* 1. Dropdown de Importadores */}
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  Importador Dono do Certificado *
-                </label>
-                <select
-                  required
-                  value={formData.empresa_id}
-                  onChange={(e) => setFormData({ ...formData, empresa_id: e.target.value })}
-                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
-                >
-                  <option value="">Selecione o importador...</option>
-                  {empresas.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.razao_social}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* SEÇÃO 1: VÍNCULO & IDENTIFICAÇÃO DO REGISTRO */}
+              <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-3.5">
+                <span className="text-[11px] font-extrabold text-blue-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                  1. Vínculo do Importador & Família
+                </span>
 
-              {/* 2. Família */}
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  Nome da Família de Produtos *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.nome_familia}
-                  onChange={(e) => setFormData({ ...formData, nome_familia: e.target.value })}
-                  placeholder="Ex: Bonecas de plástico"
-                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
-                />
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Importador Dono do Certificado *
+                    </label>
+                    <select
+                      required
+                      value={formData.empresa_id}
+                      onChange={(e) => setFormData({ ...formData, empresa_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-900 font-medium focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition"
+                    >
+                      <option value="">Selecione o importador...</option>
+                      {empresas.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.razao_social}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* 3. Nº do Registro */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Nº do Registro (Inmetro) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.numero_registro}
-                    onChange={(e) => setFormData({ ...formData, numero_registro: e.target.value })}
-                    placeholder="Ex: 009870/2022"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-mono"
-                  />
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Nome da Família de Produtos *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.nome_familia}
+                      onChange={(e) => setFormData({ ...formData, nome_familia: e.target.value })}
+                      placeholder="Ex: Bonecas de plástico / Brinquedos"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 font-semibold focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition bg-white"
+                    />
+                  </div>
                 </div>
 
-                {/* 4. Status do Registro */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Status do Registro
-                  </label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
-                  >
-                    <option value="Ativo">Ativo</option>
-                    <option value="Em Processo">Em Processo</option>
-                    <option value="Vencido">Vencido</option>
-                    <option value="Sem Registro">Sem Registro</option>
-                  </select>
-                </div>
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Nº do Registro (Inmetro) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.numero_registro}
+                      onChange={(e) => setFormData({ ...formData, numero_registro: e.target.value })}
+                      placeholder="Ex: 009870/2022"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition font-mono font-bold bg-white"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* 5. Data de Emissão */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Data de Emissão *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.data_emissao}
-                    onChange={(e) => setFormData({ ...formData, data_emissao: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
-                  />
-                </div>
-
-                {/* 6. Data de Validade */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Data de Validade *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.data_validade}
-                    onChange={(e) => setFormData({ ...formData, data_validade: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
-                  />
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Status do Registro
+                    </label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-900 font-semibold focus:border-blue-600 outline-none transition"
+                    >
+                      <option value="Ativo">Ativo</option>
+                      <option value="Em Processo">Em Processo</option>
+                      <option value="Vencido">Vencido</option>
+                      <option value="Sem Registro">Sem Registro</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              {/* 7. Dropdown de OCPs Padronizadas do Inmetro */}
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  Organismo de Certificação (OCP do Selo) *
-                </label>
-                <select
-                  required
-                  value={`${formData.ocp_nome}|${formData.ocp_numero}`}
-                  onChange={(e) => {
-                    const [nome, numero] = e.target.value.split("|");
-                    setFormData({ ...formData, ocp_nome: nome, ocp_numero: numero });
-                  }}
-                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition"
-                >
-                  <option value="brics|0098">BRICS (OCP 0098)</option>
-                  <option value="sgs|0040">SGS (OCP 0040)</option>
-                  <option value="falcao bauer|0003">FALCÃO BAUER (OCP 0003)</option>
-                  <option value="tuv r.|0004">TÜV RHEINLAND (OCP 0004)</option>
-                  <option value="ul|0110">UL TESTTECH (OCP 0110)</option>
-                  <option value="iqb|0006">IQB (OCP 0006)</option>
-                </select>
+              {/* SEÇÃO 2: VALIDADE & ORGANISMO CERTIFICADOR (OCP) */}
+              <div className="space-y-3.5">
+                <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+                  2. Prazos de Validade & Organismo Acreditado (OCP)
+                </span>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Data de Emissão *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.data_emissao}
+                      onChange={(e) => setFormData({ ...formData, data_emissao: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 outline-none font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Data de Validade (Vencimento) *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.data_validade}
+                      onChange={(e) => setFormData({ ...formData, data_validade: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 outline-none font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Organismo de Certificação (OCP do Selo) *
+                    </label>
+                    <select
+                      required
+                      value={`${formData.ocp_nome}|${formData.ocp_numero}`}
+                      onChange={(e) => {
+                        const [nome, numero] = e.target.value.split("|");
+                        setFormData({ ...formData, ocp_nome: nome, ocp_numero: numero });
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-900 font-semibold focus:border-blue-600 outline-none transition"
+                    >
+                      <option value="brics|0098">BRICS (OCP 0098)</option>
+                      <option value="sgs|0040">SGS (OCP 0040)</option>
+                      <option value="falcao bauer|0003">FALCÃO BAUER (OCP 0003)</option>
+                      <option value="tuv r.|0004">TÜV RHEINLAND (OCP 0004)</option>
+                      <option value="ul|0110">UL TESTTECH (OCP 0110)</option>
+                      <option value="iqb|0006">IQB (OCP 0006)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Código / Certificado da OCP (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.codigo_ocp || ""}
+                      onChange={(e) => setFormData({ ...formData, codigo_ocp: e.target.value })}
+                      placeholder="Ex: 13773/2026-BRI-1"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 outline-none font-mono font-semibold"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex justify-end space-x-3">
+              {/* Botões de Ação */}
+              <div className="pt-3 border-t border-slate-100 flex justify-end space-x-3">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+                  className="px-5 py-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm hover:shadow transition disabled:opacity-50"
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-sm hover:shadow-md transition disabled:opacity-50"
                 >
-                  {saving ? "Salvando..." : "Salvar"}
+                  {saving ? "Salvando..." : "Salvar Certificado"}
                 </button>
               </div>
             </form>
