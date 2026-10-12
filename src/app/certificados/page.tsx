@@ -71,6 +71,7 @@ export default function CertificadosPage() {
   const [filtroEmpresa, setFiltroEmpresa] = useState<string>("");
   const [filtroFamilia, setFiltroFamilia] = useState<string>("");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
+  const [buscaCertificado, setBuscaCertificado] = useState<string>("" );
 
   // Estado do Modal Bonitão
   const [modalAviso, setModalAviso] = useState<{
@@ -262,8 +263,15 @@ export default function CertificadosPage() {
     )
   );
 
-  // Aplicação dos 3 filtros em tempo real
+  // Aplicação dos filtros em tempo real
   const certificadosExibidos = certificados.filter((cert) => {
+    if (buscaCertificado.trim()) {
+      const termo = buscaCertificado.toLowerCase();
+      const bateFamilia = cert.nome_familia.toLowerCase().includes(termo);
+      const bateRegistro = cert.numero_registro.toLowerCase().includes(termo);
+      if (!bateFamilia && !bateRegistro) return false;
+    }
+
     if (filtroEmpresa && cert.empresa_id !== filtroEmpresa) return false;
     if (filtroFamilia && cert.nome_familia !== filtroFamilia) return false;
 
@@ -341,12 +349,13 @@ export default function CertificadosPage() {
             </svg>
             <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Filtros de Certificados</h2>
           </div>
-          {(filtroEmpresa || filtroFamilia || filtroStatus !== "todos") && (
+          {(filtroEmpresa || filtroFamilia || filtroStatus !== "todos" || buscaCertificado) && (
             <button
               onClick={() => {
                 setFiltroEmpresa("");
                 setFiltroFamilia("");
                 setFiltroStatus("todos");
+                setBuscaCertificado("");
               }}
               className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition w-fit"
             >
@@ -355,8 +364,35 @@ export default function CertificadosPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* 1. Filtro por Importador */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* 1. Busca por Nome da Família ou Nº Registro */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Buscar Certificado
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={buscaCertificado}
+                onChange={(e) => setBuscaCertificado(e.target.value)}
+                placeholder="Família ou nº registro..."
+                className="w-full pl-8 pr-7 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition font-medium"
+              />
+              <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              {buscaCertificado && (
+                <button
+                  onClick={() => setBuscaCertificado("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Filtro por Importador */}
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Importador
@@ -378,7 +414,7 @@ export default function CertificadosPage() {
             </select>
           </div>
 
-          {/* 2. Filtro por Família */}
+          {/* 3. Filtro por Família */}
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Família de Produtos
@@ -397,7 +433,7 @@ export default function CertificadosPage() {
             </select>
           </div>
 
-          {/* 3. Filtro por Situação / Compliance */}
+          {/* 4. Filtro por Situação / Compliance */}
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Situação do Certificado

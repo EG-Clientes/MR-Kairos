@@ -290,10 +290,10 @@ export default function LiquidificadorPage() {
       ctx.font = `bold ${fontSize - 1}px Arial, Helvetica, sans-serif`;
       ctx.fillText("GUARDAR PARA EVENTUAIS CONSULTAS", 520, yPos + lineH + 6);
 
-      // --- SELO 0-3 ANOS (Geometria SVG Oficial com carinha triste, posicionado no 63%) ---
+      // --- SELO 0-3 ANOS (Geometria SVG Oficial com carinha triste, posicionado no 66% e à direita) ---
       if (prod.restritivo_0_3_anos) {
-        const cx = 1065;
-        const cy = 370; // 63% do bloco central
+        const cx = 1080;
+        const cy = 385; // 66% do bloco central
         const r = 70;
 
         ctx.save();
@@ -433,77 +433,77 @@ export default function LiquidificadorPage() {
         }
       }
 
-      // COLUNA 3: SELO OFICIAL INMETRO / OCP (Direita, 280x200px idêntico à tela)
+      // COLUNA 3: SELO OFICIAL INMETRO / OCP (Quadrado perfeito 230x230px, 100% idêntico à tela)
       if (prod.inmetro_familias) {
-        const ix = 865;
-        const iy = 535;
-        const iw = 295;
-        const ih = 210;
+        const ix = 930;
+        const iy = 525;
+        const iw = 230;
+        const ih = 230;
 
         ctx.save();
-        // Moldura arredondada com borda cinza suave (neutral-300)
+        // Moldura arredondada perfeitamente quadrada (proporção 1:1)
         ctx.strokeStyle = "#d4d4d4";
         ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.roundRect(ix, iy, iw, ih, 26);
+        ctx.roundRect(ix, iy, iw, ih, 24);
         ctx.stroke();
 
         // Título Segurança
         ctx.fillStyle = "#000000";
         ctx.font = "900 23px Arial, Helvetica, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("Segurança", ix + iw / 2, iy + 34);
+        ctx.fillText("Segurança", ix + iw / 2, iy + 36);
 
         // Sub-bloco BRICS (Lado Esquerdo)
-        const bricsX = ix + 65;
+        const bricsX = ix + 56;
         ctx.textAlign = "center";
-        ctx.font = "900 28px Arial, Helvetica, sans-serif";
-        ctx.fillText("brics", bricsX, iy + 92);
+        ctx.font = "bold 27px 'Century Gothic', Arial, sans-serif";
+        ctx.fillText("brics", bricsX, iy + 106);
 
-        // 4 esferas curvas sobre o 'i' da marca BRICS
+        // 4 esferas coladas sobre o 'i' da marca BRICS
         ctx.beginPath();
-        ctx.arc(bricsX - 3.5, iy + 73, 2.2, 0, 2 * Math.PI);
-        ctx.arc(bricsX - 1.5, iy + 70, 2.6, 0, 2 * Math.PI);
-        ctx.arc(bricsX + 1, iy + 68, 3, 0, 2 * Math.PI);
-        ctx.arc(bricsX + 3.5, iy + 71, 2.2, 0, 2 * Math.PI);
+        ctx.arc(bricsX - 3.5, iy + 87, 2.0, 0, 2 * Math.PI);
+        ctx.arc(bricsX - 1.5, iy + 84, 2.4, 0, 2 * Math.PI);
+        ctx.arc(bricsX + 1.2, iy + 82, 2.7, 0, 2 * Math.PI);
+        ctx.arc(bricsX + 3.8, iy + 85, 2.1, 0, 2 * Math.PI);
         ctx.fill();
 
-        ctx.font = "bold 13px Arial, Helvetica, sans-serif";
+        ctx.font = "bold 12.5px Arial, Helvetica, sans-serif";
         const textoOcp = prod.inmetro_familias.codigo_ocp 
           ? prod.inmetro_familias.codigo_ocp 
           : `OCP ${prod.inmetro_familias.ocp_numero || "0098"}`;
-        ctx.fillText(textoOcp, bricsX, iy + 115);
+        ctx.fillText(textoOcp, bricsX, iy + 128);
 
-        // Sub-bloco INMETRO (Geometria Oficial com Pilares Maciços)
-        const inmx = ix + 175;
-        const inmy = iy + 62;
+        // Sub-bloco INMETRO (Fenda diagonal branca limpa e mais grossa, sem risco)
+        const inmx = ix + 138;
+        const inmy = iy + 74;
         ctx.fillStyle = "#000000";
         // Barra Superior
-        ctx.fillRect(inmx, inmy, 68, 9);
+        ctx.fillRect(inmx, inmy, 64, 8.5);
         // Barra Inferior
-        ctx.fillRect(inmx, inmy + 48, 68, 9);
-        // Pilar Superior
+        ctx.fillRect(inmx, inmy + 44, 64, 8.5);
+        // Triângulo Superior Preto (recuado para abrir a fenda branca)
         ctx.beginPath();
-        ctx.moveTo(inmx + 22, inmy + 9);
-        ctx.lineTo(inmx + 47, inmy + 9);
-        ctx.lineTo(inmx + 47, inmy + 36);
+        ctx.moveTo(inmx + 25, inmy + 8.5);
+        ctx.lineTo(inmx + 44, inmy + 8.5);
+        ctx.lineTo(inmx + 44, inmy + 30);
         ctx.fill();
-        // Pilar Inferior
+        // Triângulo Inferior Preto (recuado para abrir a fenda branca)
         ctx.beginPath();
-        ctx.moveTo(inmx + 21, inmy + 23);
-        ctx.lineTo(inmx + 21, inmy + 48);
-        ctx.lineTo(inmx + 46, inmy + 48);
+        ctx.moveTo(inmx + 20, inmy + 22.5);
+        ctx.lineTo(inmx + 20, inmy + 44);
+        ctx.lineTo(inmx + 39, inmy + 44);
         ctx.fill();
 
-        ctx.font = "900 italic 15px Arial, Helvetica, sans-serif";
+        ctx.font = "900 italic 14.5px Arial, Helvetica, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("INMETRO", inmx + 34, inmy + 71);
+        ctx.fillText("INMETRO", inmx + 32, inmy + 65);
 
         // Rodapé: REGISTRO + Número
-        ctx.font = "bold 13px Arial, Helvetica, sans-serif";
-        ctx.fillText("REGISTRO", ix + iw / 2, iy + 165);
+        ctx.font = "bold 12.5px Arial, Helvetica, sans-serif";
+        ctx.fillText("REGISTRO", ix + iw / 2, iy + 182);
         ctx.font = "900 17px Arial, Helvetica, sans-serif";
-        ctx.fillText(prod.inmetro_familias.numero_registro, ix + iw / 2, iy + 188);
+        ctx.fillText(prod.inmetro_familias.numero_registro, ix + iw / 2, iy + 205);
 
         ctx.restore();
       }

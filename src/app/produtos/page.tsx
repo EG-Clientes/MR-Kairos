@@ -74,6 +74,7 @@ export default function ProdutosPage() {
   const [filtroEmpresa, setFiltroEmpresa] = useState<string>("");
   const [filtroFamilia, setFiltroFamilia] = useState<string>("");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
+  const [buscaNome, setBuscaNome] = useState<string>("");
 
   // Estado do Modal Bonitão
   const [modalAviso, setModalAviso] = useState<{
@@ -343,6 +344,13 @@ export default function ProdutosPage() {
 
   // Aplicação dos filtros sobre a lista
   const produtosExibidos = produtos.filter((prod) => {
+    if (buscaNome.trim()) {
+      const termo = buscaNome.toLowerCase();
+      const bateDescricao = prod.descricao.toLowerCase().includes(termo);
+      const bateFty = prod.fty_no.toLowerCase().includes(termo);
+      if (!bateDescricao && !bateFty) return false;
+    }
+
     if (filtroEmpresa && prod.empresa_id !== filtroEmpresa) return false;
     if (filtroFamilia && prod.familia_id !== filtroFamilia) return false;
 
@@ -486,12 +494,13 @@ export default function ProdutosPage() {
             </svg>
             <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Filtros de Catálogo</h2>
           </div>
-          {(filtroEmpresa || filtroFamilia || filtroStatus !== "todos") && (
+          {(filtroEmpresa || filtroFamilia || filtroStatus !== "todos" || buscaNome) && (
             <button
               onClick={() => {
                 setFiltroEmpresa("");
                 setFiltroFamilia("");
                 setFiltroStatus("todos");
+                setBuscaNome("");
               }}
               className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition w-fit"
             >
@@ -500,8 +509,35 @@ export default function ProdutosPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* 1. Filtro por Importador */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* 1. Busca por Nome ou Código */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              Buscar Produto
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={buscaNome}
+                onChange={(e) => setBuscaNome(e.target.value)}
+                placeholder="Nome ou código FTY..."
+                className="w-full pl-8 pr-7 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition font-medium"
+              />
+              <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              {buscaNome && (
+                <button
+                  onClick={() => setBuscaNome("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Filtro por Importador */}
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Importador
@@ -523,7 +559,7 @@ export default function ProdutosPage() {
             </select>
           </div>
 
-          {/* 2. Filtro por Família */}
+          {/* 3. Filtro por Família */}
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Família Inmetro
@@ -542,7 +578,7 @@ export default function ProdutosPage() {
             </select>
           </div>
 
-          {/* 3. Filtro por Situação / Compliance */}
+          {/* 4. Filtro por Situação / Compliance */}
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Situação Inmetro

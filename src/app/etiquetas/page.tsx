@@ -390,7 +390,7 @@ export default function GeradorEtiquetasPage() {
 
                     {/* Selo Regulamentar 0-3 Anos Idêntico ao Original */}
                     {produtoSelecionado.restritivo_0_3_anos && (
-                      <div className="absolute right-1 top-[63%] -translate-y-1/2 w-14 h-14 flex-shrink-0">
+                      <div className="absolute -right-1 top-[66%] -translate-y-1/2 w-14 h-14 flex-shrink-0">
                         <svg className="w-full h-full" viewBox="0 0 100 100">
                           {/* Círculo externo vermelho */}
                           <circle cx="50" cy="50" r="44" stroke="#DC2626" strokeWidth="8" fill="#FFF" />
@@ -479,29 +479,29 @@ export default function GeradorEtiquetasPage() {
                     {/* Coluna 3: Selo Oficial INMETRO / OCP Idêntico ao Modelo */}
                     <div className="flex-shrink-0">
                       {produtoSelecionado.inmetro_familias ? (
-                        <div className="border border-neutral-300 rounded-xl px-2.5 py-1.5 bg-white w-[104px] flex flex-col items-center">
+                        <div className="border border-neutral-300 rounded-xl px-2 py-2 bg-white w-[98px] h-[98px] flex flex-col items-center justify-between">
                           {/* Título Segurança */}
-                          <span className="font-black text-[9px] text-black tracking-tight mb-1">
+                          <span className="font-extrabold text-[9px] text-black tracking-tight">
                             Segurança
                           </span>
 
                           {/* Área Central: Logo BRICS e Logo INMETRO lado a lado */}
-                          <div className="w-full flex items-center justify-between px-1 my-0.5">
+                          <div className="w-full flex items-center justify-between px-1">
                             {/* Logo Oficial BRICS */}
                             <div className="flex flex-col items-center">
-                              <div className="flex items-baseline">
-                                <span className="font-bold text-[11px] text-black tracking-tighter">br</span>
-                                <span className="relative font-bold text-[11px] text-black tracking-tighter">
-                                  {/* As 4 esferas em curva sobre o i idênticas à marca */}
-                                  <span className="absolute -top-[5px] left-[-3px] flex items-end">
-                                    <span className="w-[1.4px] h-[1.4px] bg-black rounded-full mb-[1px]"></span>
-                                    <span className="w-[1.6px] h-[1.6px] bg-black rounded-full mb-[2.2px] ml-[0.6px]"></span>
-                                    <span className="w-[1.8px] h-[1.8px] bg-black rounded-full mb-[3.2px] ml-[0.6px]"></span>
-                                    <span className="w-[1.4px] h-[1.4px] bg-black rounded-full mb-[1.2px] ml-[0.6px]"></span>
+                              <div className="flex items-baseline font-bold text-[11px] text-black tracking-tighter" style={{ fontFamily: "Century Gothic, Arial Rounded MT Bold, sans-serif" }}>
+                                <span>br</span>
+                                <span className="relative">
+                                  {/* As 4 esferas coladas sobre a haste do i */}
+                                  <span className="absolute -top-[1.2px] -left-[1.5px] flex items-end">
+                                    <span className="w-[1.6px] h-[1.6px] bg-black rounded-full mb-[0.2px]"></span>
+                                    <span className="w-[2.1px] h-[2.1px] bg-black rounded-full mb-[1.1px] ml-[0.3px]"></span>
+                                    <span className="w-[2.4px] h-[2.4px] bg-black rounded-full mb-[1.8px] ml-[0.3px]"></span>
+                                    <span className="w-[1.7px] h-[1.7px] bg-black rounded-full mb-[0.6px] ml-[0.3px]"></span>
                                   </span>
                                   ı
                                 </span>
-                                <span className="font-bold text-[11px] text-black tracking-tighter">cs</span>
+                                <span>cs</span>
                               </div>
                               <span className="text-[5.5px] font-bold text-black tracking-tight mt-0.5 whitespace-nowrap">
                                 {produtoSelecionado.inmetro_familias.codigo_ocp 
@@ -510,17 +510,17 @@ export default function GeradorEtiquetasPage() {
                               </span>
                             </div>
 
-                            {/* Logo Oficial INMETRO (Geometria Idêntica à Original) */}
+                            {/* Logo Oficial INMETRO (Fenda do N mais grossa e limpa, sem risco) */}
                             <div className="flex flex-col items-center pl-1">
                               <svg className="w-7 h-6" viewBox="0 0 52 46">
                                 {/* Barra Superior */}
                                 <rect x="0" y="0" width="52" height="7" fill="#000" />
                                 {/* Barra Inferior */}
                                 <rect x="0" y="39" width="52" height="7" fill="#000" />
-                                {/* Triângulo Superior Preto (pilar direito maciço) */}
-                                <polygon points="17,7 36,7 36,28" fill="#000" />
-                                {/* Triângulo Inferior Preto (pilar esquerdo maciço) */}
-                                <polygon points="16,18 16,39 35,39" fill="#000" />
+                                {/* Triângulo Superior Preto */}
+                                <polygon points="20,7 36,7 36,25" fill="#000" />
+                                {/* Triângulo Inferior Preto */}
+                                <polygon points="16,21 16,39 32,39" fill="#000" />
                               </svg>
                               <span className="text-[6.5px] font-black italic tracking-tighter text-black mt-0.5">
                                 INMETRO
@@ -529,7 +529,7 @@ export default function GeradorEtiquetasPage() {
                           </div>
 
                           {/* Rodapé Oficial do Selo: REGISTRO + Número */}
-                          <div className="text-center mt-1 leading-none">
+                          <div className="text-center leading-none mb-0.5">
                             <p className="text-[5.5px] font-bold text-black tracking-wider">
                               REGISTRO
                             </p>
