@@ -43,6 +43,7 @@ export default function GeradorEtiquetasPage() {
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState<string>(""); // Campo de busca instantânea
+  const [avisosCustom, setAvisosCustom] = useState<{ id: string; texto_aviso: string }[]>([]);
 
   // Controle das Abas de Modalidade
   const [modoEtiqueta, setModoEtiqueta] = useState<"padrao" | "concessao">("padrao");
@@ -87,19 +88,28 @@ export default function GeradorEtiquetasPage() {
   // Carrega os produtos com todas as suas relações de empresas e certificados
   async function carregarProdutos() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("produtos")
-      .select(`
-        *,
-        empresas(razao_social, cnpj, endereco, sac_email, logo_url),
-        inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero, codigo_ocp, status, data_validade)
-      `)
-      .order("descricao");
+    const [prodRes, avisosRes] = await Promise.all([
+      supabase
+        .from("produtos")
+        .select(`
+          *,
+          empresas(razao_social, cnpj, endereco, sac_email, logo_url),
+          inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero, codigo_ocp, status, data_validade)
+        `)
+        .order("descricao"),
+      supabase
+        .from("avisos_customizados")
+        .select("id, texto_aviso")
+    ]);
 
-    if (!error && data) {
-      setProdutos(data as any);
-      if (data.length > 0) {
-        setProdutoSelecionado(data[0] as any);
+    if (avisosRes.data) {
+      setAvisosCustom(avisosRes.data);
+    }
+
+    if (!prodRes.error && prodRes.data) {
+      setProdutos(prodRes.data as any);
+      if (prodRes.data.length > 0) {
+        setProdutoSelecionado(prodRes.data[0] as any);
       }
     }
     setLoading(false);
@@ -143,6 +153,24 @@ export default function GeradorEtiquetasPage() {
       );
     }
 
+    // Puxa os avisos extras dinâmicos criados no catálogo
+    const extras = (prod as any).avisos_extras;
+    if (Array.isArray(extras)) {
+      extras.forEach((item: any) => {
+        if (typeof item === "string" && item.trim()) {
+          // Busca o texto oficial correspondente a esse ID
+          const avisoEncontrado = avisosCustom.find((a) => a.id === item.trim());
+          if (avisoEncontrado) {
+            textos.push(avisoEncontrado.texto_aviso.trim());
+          } else if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.trim())) {
+            textos.push(item.trim());
+          }
+        } else if (item?.texto_aviso) {
+          textos.push(item.texto_aviso.trim());
+        }
+      });
+    }
+
     return textos;
   }
 
@@ -150,12 +178,16 @@ export default function GeradorEtiquetasPage() {
 
   // Algoritmo de Auto-Scale de Compliance: calcula o tamanho do texto para auto-ajustar a fonte
   const totalCaracteresAvisos = avisos.reduce((acc, texto) => acc + texto.length, 0);
-  let classTamanhoFonte = "text-[8px] leading-tight";
+  let classTamanhoFonte = "text-[8px] leading-tight space-y-1";
   
-  if (totalCaracteresAvisos > 450) {
-    classTamanhoFonte = "text-[6px] leading-[1.1]"; // Fonte menor para textos muito longos
+  if (totalCaracteresAvisos > 750) {
+    classTamanhoFonte = "text-[5px] leading-[1.05] space-y-0.5"; // Hiper compacto para textos extremos (evita colisão no topo)
+  } else if (totalCaracteresAvisos > 550) {
+    classTamanhoFonte = "text-[5.5px] leading-[1.1] space-y-0.5"; // Muito compacto
+  } else if (totalCaracteresAvisos > 400) {
+    classTamanhoFonte = "text-[6px] leading-[1.1] space-y-1"; // Fonte menor padrão
   } else if (totalCaracteresAvisos > 200) {
-    classTamanhoFonte = "text-[7px] leading-tight"; // Fonte média
+    classTamanhoFonte = "text-[7px] leading-tight space-y-1"; // Fonte média
   }
 
   // Validação de Compliance (Bloqueia se sem registro ou vencido)
@@ -376,7 +408,7 @@ export default function GeradorEtiquetasPage() {
 
                   {/* Bloco do Meio: Avisos Legais Centralizados + Selo Etário 0-3 à Direita */}
                   <div className="relative flex items-center justify-center my-auto py-1 w-full min-h-[90px]">
-                    <div className={`w-[320px] text-center font-bold ${classTamanhoFonte} text-black space-y-1 pr-2`}>
+                    <div className={`w-[320px] text-center font-bold ${classTamanhoFonte} text-black pr-2`}>
                       {avisos.map((aviso, i) => (
                         <p key={i}>{aviso}</p>
                       ))}

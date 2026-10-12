@@ -75,6 +75,7 @@ export default function LiquidificadorPage() {
   // Estados para o Cadastro Rápido em 1 Clique e Seleção da Carga
   const [empresas, setEmpresas] = useState<EmpresaOption[]>([]);
   const [familias, setFamilias] = useState<FamiliaOption[]>([]);
+  const [avisosCustom, setAvisosCustom] = useState<{ id: string; texto_aviso: string }[]>([]);
   const [empresaLote, setEmpresaLote] = useState<string>("");
   const [empresaSelecionada, setEmpresaSelecionada] = useState<string>("");
   const [familiaLote, setFamiliaLote] = useState<string>("");
@@ -95,14 +96,16 @@ export default function LiquidificadorPage() {
 
   // Carrega empresas e famílias cadastradas ao carregar a página
   async function carregarAuxiliares() {
-    const [empRes, famRes] = await Promise.all([
+    const [empRes, famRes, avisosRes] = await Promise.all([
       supabase.from("empresas").select("id, razao_social").order("razao_social"),
       supabase.from("inmetro_familias").select("id, empresa_id, nome_familia").order("nome_familia"),
+      supabase.from("avisos_customizados").select("id, texto_aviso"),
     ]);
     if (empRes.data) {
       setEmpresas(empRes.data);
     }
     if (famRes.data) setFamilias(famRes.data);
+    if (avisosRes.data) setAvisosCustom(avisosRes.data);
   }
 
   // Monitora mudança de empresa para filtrar famílias pertinentes
@@ -246,16 +249,46 @@ export default function LiquidificadorPage() {
         avisos.push("CUIDADO: CONTÉM ÍMÃ(ES). A INGESTÃO OU ASPIRAÇÃO DE ÍMÃ(ES) PODE CAUSAR LESÕES GRAVES E ATÉ FATAIS.");
       }
 
-      // Auto-scale dinâmico idêntico à tela de Etiquetas
+      // Puxa os avisos extras dinâmicos criados no catálogo
+      const extras = (prod as any).avisos_extras;
+      if (Array.isArray(extras)) {
+        extras.forEach((item: any) => {
+          if (typeof item === "string" && item.trim()) {
+            // Busca o texto oficial correspondente a esse ID
+            const avisoEncontrado = avisosCustom.find((a) => a.id === item.trim());
+            if (avisoEncontrado) {
+              avisos.push(avisoEncontrado.texto_aviso.trim());
+            } else if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.trim())) {
+              avisos.push(item.trim());
+            }
+          } else if (item?.texto_aviso) {
+            avisos.push(item.texto_aviso.trim());
+          }
+        });
+      }
+
+      // Auto-scale dinâmico em 5 marchas (idêntico à tela de visualização térmica)
       const totalChars = avisos.reduce((acc, t) => acc + t.length, 0);
       let fontSize = 19;
       let lineH = 25;
-      if (totalChars > 450) {
-        fontSize = 15;
-        lineH = 20;
+      let espacoParagrafo = 4;
+
+      if (totalChars > 750) {
+        fontSize = 13.5;
+        lineH = 17;
+        espacoParagrafo = 1.5;
+      } else if (totalChars > 550) {
+        fontSize = 14.5;
+        lineH = 19;
+        espacoParagrafo = 2;
+      } else if (totalChars > 400) {
+        fontSize = 16;
+        lineH = 21;
+        espacoParagrafo = 3;
       } else if (totalChars > 200) {
-        fontSize = 17;
+        fontSize = 17.5;
         lineH = 23;
+        espacoParagrafo = 3.5;
       }
 
       ctx.fillStyle = "#000000";
@@ -280,7 +313,7 @@ export default function LiquidificadorPage() {
         });
         if (linha) {
           ctx.fillText(linha, 520, yPos);
-          yPos += lineH + 3;
+          yPos += lineH + espacoParagrafo;
         }
       });
 

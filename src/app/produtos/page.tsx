@@ -76,6 +76,13 @@ export default function ProdutosPage() {
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [buscaNome, setBuscaNome] = useState<string>("");
 
+  // Estados dos Avisos Customizados & Gaveta Lateral
+  const [avisosCustom, setAvisosCustom] = useState<{ id: string; empresa_id: string | null; titulo: string; texto_aviso: string }[]>([]);
+  const [abaGerenciador, setAbaGerenciador] = useState(false);
+  const [novoAvisoTitulo, setNovoAvisoTitulo] = useState("");
+  const [novoAvisoTexto, setNovoAvisoTexto] = useState("");
+  const [editandoAvisoId, setEditandoAvisoId] = useState<string | null>(null);
+
   // Estado do Modal Bonitão
   const [modalAviso, setModalAviso] = useState<{
     isOpen: boolean;
@@ -102,13 +109,14 @@ export default function ProdutosPage() {
     metal: false,
     restritivo_0_3_anos: false,
     idade_minima: "+3 anos",
+    avisos_extras: [] as any[],
   });
 
   async function carregarDados() {
     setLoading(true);
 
-    // Carrega produtos, empresas e famílias de certificação em paralelo
-    const [prodResult, empResult, famResult] = await Promise.all([
+    // Carrega produtos, empresas, famílias e avisos customizados em paralelo
+    const [prodResult, empResult, famResult, avisosResult] = await Promise.all([
       supabase
         .from("produtos")
         .select("*, empresas(razao_social), inmetro_familias(nome_familia, status, data_validade)")
@@ -120,7 +128,11 @@ export default function ProdutosPage() {
       supabase
         .from("inmetro_familias")
         .select("id, empresa_id, nome_familia")
-        .order("nome_familia")
+        .order("nome_familia"),
+      supabase
+        .from("avisos_customizados")
+        .select("*")
+        .order("created_at")
     ]);
 
     const { data: prodData, error: prodError } = prodResult;
@@ -130,6 +142,7 @@ export default function ProdutosPage() {
     if (!prodError && prodData) setProdutos(prodData as any);
     if (!empError && empData) setEmpresas(empData);
     if (!famError && famData) setFamilias(famData);
+    if (avisosResult.data) setAvisosCustom(avisosResult.data as any);
 
     setLoading(false);
   }
@@ -169,6 +182,7 @@ export default function ProdutosPage() {
   // Modo de cadastro limpo
   function handleNovo() {
     setEditingId(null);
+    setAbaGerenciador(false);
     const dataAtualString = `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`;
     setFormData({
       empresa_id: "",
@@ -186,6 +200,7 @@ export default function ProdutosPage() {
       metal: false,
       restritivo_0_3_anos: false,
       idade_minima: "+3 anos",
+      avisos_extras: [],
     });
     setError(null);
     setIsModalOpen(true);
@@ -194,6 +209,7 @@ export default function ProdutosPage() {
   // Modo edição preenchido
   function handleEditar(prod: Produto) {
     setEditingId(prod.id);
+    setAbaGerenciador(false);
     setFormData({
       empresa_id: prod.empresa_id,
       familia_id: prod.familia_id || "",
@@ -210,6 +226,7 @@ export default function ProdutosPage() {
       metal: prod.metal,
       restritivo_0_3_anos: prod.restritivo_0_3_anos,
       idade_minima: prod.idade_minima || "+3 anos",
+      avisos_extras: (prod as any).avisos_extras || [],
     });
     setError(null);
     setIsModalOpen(true);
@@ -275,6 +292,7 @@ export default function ProdutosPage() {
           metal: formData.metal,
           restritivo_0_3_anos: formData.restritivo_0_3_anos,
           idade_minima: formData.idade_minima || null,
+          avisos_extras: formData.avisos_extras,
         })
         .eq("id", editingId);
 
@@ -305,6 +323,7 @@ export default function ProdutosPage() {
           metal: formData.metal,
           restritivo_0_3_anos: formData.restritivo_0_3_anos,
           idade_minima: formData.idade_minima || null,
+          avisos_extras: formData.avisos_extras,
         },
       ]);
 
@@ -892,63 +911,181 @@ export default function ProdutosPage() {
                 </div>
               </div>
 
-              {/* SEÇÃO 3: SINALIZADORES DE SEGURANÇA JURÍDICA */}
-              <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200/80 space-y-3">
-                <span className="text-[11px] font-extrabold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-amber-600"></span>
-                  2. Avisos Legais de Segurança Obrigatórios
-                </span>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-amber-100 hover:border-amber-300 transition">
-                    <input
-                      type="checkbox"
-                      checked={formData.usa_pilha}
-                      onChange={(e) => setFormData({ ...formData, usa_pilha: e.target.checked })}
-                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
-                    />
-                    <span>Contém Pilha / Bateria</span>
-                  </label>
+              {/* SEÇÃO 3: SINALIZADORES DE SEGURANÇA JURÍDICA COM SLIDE NATIVO */}
+              <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200/80 space-y-3 overflow-hidden relative">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-600"></span>
+                    2. Avisos Legais de Segurança Obrigatórios
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAbaGerenciador(!abaGerenciador)}
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-white border border-blue-200 px-2.5 py-1 rounded-lg transition shadow-xs flex items-center gap-1"
+                  >
+                    <span>{abaGerenciador ? "← Voltar às Flags" : "+ Gerenciar Flags"}</span>
+                  </button>
+                </div>
 
-                  <label className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-amber-100 hover:border-amber-300 transition">
-                    <input
-                      type="checkbox"
-                      checked={formData.contem_ima}
-                      onChange={(e) => setFormData({ ...formData, contem_ima: e.target.checked })}
-                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
-                    />
-                    <span>Contém Ímã</span>
-                  </label>
+                {/* CONTAINER DO SLIDE SUAVE ESTILO CELULAR */}
+                <div className="relative overflow-hidden min-h-[140px]">
+                  
+                  {/* TELA A: Checkboxes de Seleção (Padrões + Customizadas) */}
+                  <div className={`transition-all duration-300 ease-in-out ${abaGerenciador ? "-translate-x-full opacity-0 pointer-events-none absolute w-full" : "translate-x-0 opacity-100"}`}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <label className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-amber-100 hover:border-amber-300 transition">
+                        <input
+                          type="checkbox"
+                          checked={formData.usa_pilha}
+                          onChange={(e) => setFormData({ ...formData, usa_pilha: e.target.checked })}
+                          className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                        />
+                        <span>Contém Pilha / Bateria</span>
+                      </label>
 
-                  <label className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-amber-100 hover:border-amber-300 transition">
-                    <input
-                      type="checkbox"
-                      checked={formData.partes_pequenas}
-                      onChange={(e) => setFormData({ ...formData, partes_pequenas: e.target.checked })}
-                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
-                    />
-                    <span>Contém Partes Pequenas</span>
-                  </label>
+                      <label className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-amber-100 hover:border-amber-300 transition">
+                        <input
+                          type="checkbox"
+                          checked={formData.contem_ima}
+                          onChange={(e) => setFormData({ ...formData, contem_ima: e.target.checked })}
+                          className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                        />
+                        <span>Contém Ímã</span>
+                      </label>
 
-                  <label className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-amber-100 hover:border-amber-300 transition">
-                    <input
-                      type="checkbox"
-                      checked={formData.metal}
-                      onChange={(e) => setFormData({ ...formData, metal: e.target.checked })}
-                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
-                    />
-                    <span>Contém Fechos Metálicos</span>
-                  </label>
+                      <label className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-amber-100 hover:border-amber-300 transition">
+                        <input
+                          type="checkbox"
+                          checked={formData.partes_pequenas}
+                          onChange={(e) => setFormData({ ...formData, partes_pequenas: e.target.checked })}
+                          className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                        />
+                        <span>Contém Partes Pequenas</span>
+                      </label>
 
-                  <label className="flex items-center space-x-2.5 text-rose-900 text-xs font-bold cursor-pointer select-none bg-rose-50/80 p-2.5 rounded-xl border border-rose-200 col-span-1 sm:col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.restritivo_0_3_anos}
-                      onChange={(e) => setFormData({ ...formData, restritivo_0_3_anos: e.target.checked })}
-                      className="rounded text-rose-600 focus:ring-rose-500 h-4 w-4"
-                    />
-                    <span>Restritivo para menores de 3 anos (Exibe Selo Gráfico 0-3)</span>
-                  </label>
+                      <label className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-amber-100 hover:border-amber-300 transition">
+                        <input
+                          type="checkbox"
+                          checked={formData.metal}
+                          onChange={(e) => setFormData({ ...formData, metal: e.target.checked })}
+                          className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                        />
+                        <span>Contém Fechos Metálicos</span>
+                      </label>
+
+                      {/* Renderiza as flags adicionadas dinamicamente */}
+                      {avisosCustom
+                        .filter((av) => !av.empresa_id || av.empresa_id === formData.empresa_id)
+                        .map((aviso) => {
+                          const estaMarcado = formData.avisos_extras?.some((x: any) => (typeof x === "string" ? x === aviso.id : x.id === aviso.id));
+                          return (
+                            <label key={aviso.id} className="flex items-center space-x-2.5 text-slate-800 text-xs font-semibold cursor-pointer select-none bg-white p-2.5 rounded-xl border border-blue-200 hover:border-blue-400 transition">
+                              <input
+                                type="checkbox"
+                                checked={estaMarcado}
+                                onChange={(e) => {
+                                  const novoArr = e.target.checked
+                                    ? [...(formData.avisos_extras || []).filter((x: any) => (typeof x === "string" ? x !== aviso.id : x.id !== aviso.id)), { id: aviso.id, texto_aviso: aviso.texto_aviso }]
+                                    : (formData.avisos_extras || []).filter((x: any) => (typeof x === "string" ? x !== aviso.id : x.id !== aviso.id));
+                                  setFormData({ ...formData, avisos_extras: novoArr });
+                                }}
+                                className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                              />
+                              <span className="truncate">{aviso.titulo}</span>
+                            </label>
+                          );
+                        })}
+
+                      {/* Selo 0-3 Anos protegido */}
+                      <label className="flex items-center space-x-2.5 text-rose-900 text-xs font-bold cursor-pointer select-none bg-rose-50/80 p-2.5 rounded-xl border border-rose-200 col-span-1 sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          checked={formData.restritivo_0_3_anos}
+                          onChange={(e) => setFormData({ ...formData, restritivo_0_3_anos: e.target.checked })}
+                          className="rounded text-rose-600 focus:ring-rose-500 h-4 w-4"
+                        />
+                        <span>Restritivo para menores de 3 anos (Exibe Selo Gráfico 0-3)</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* TELA B: Gerenciador de Criação / Exclusão de Flags */}
+                  <div className={`transition-all duration-300 ease-in-out ${!abaGerenciador ? "translate-x-full opacity-0 pointer-events-none absolute w-full" : "translate-x-0 opacity-100"}`}>
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-3">
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={novoAvisoTitulo}
+                          onChange={(e) => setNovoAvisoTitulo(e.target.value)}
+                          placeholder="Nome do Checkbox (ex: Contém Borda Cortante)"
+                          className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-blue-500"
+                        />
+                        <textarea
+                          rows={2}
+                          value={novoAvisoTexto}
+                          onChange={(e) => setNovoAvisoTexto(e.target.value)}
+                          placeholder="Texto legal oficial que será carimbado na etiqueta..."
+                          className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-700 outline-none focus:border-blue-500 resize-none font-medium"
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!novoAvisoTitulo.trim() || !novoAvisoTexto.trim()) return;
+                            if (editandoAvisoId) {
+                              await supabase.from("avisos_customizados").update({ titulo: novoAvisoTitulo.trim(), texto_aviso: novoAvisoTexto.trim() }).eq("id", editandoAvisoId);
+                            } else {
+                              await supabase.from("avisos_customizados").insert([{ empresa_id: formData.empresa_id || null, titulo: novoAvisoTitulo.trim(), texto_aviso: novoAvisoTexto.trim() }]);
+                            }
+                            setNovoAvisoTitulo("");
+                            setNovoAvisoTexto("");
+                            setEditandoAvisoId(null);
+                            const { data } = await supabase.from("avisos_customizados").select("*").order("created_at");
+                            if (data) setAvisosCustom(data);
+                          }}
+                          className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
+                        >
+                          {editandoAvisoId ? "Salvar Alteração do Aviso" : "+ Cadastrar Novo Aviso"}
+                        </button>
+                      </div>
+
+                      {/* Lista de flags gerenciáveis */}
+                      <div className="space-y-1.5 max-h-36 overflow-y-auto pt-2 border-t border-slate-100">
+                        {avisosCustom.length === 0 ? (
+                          <p className="text-[11px] text-slate-400 italic text-center py-2">Nenhum aviso personalizado cadastrado.</p>
+                        ) : (
+                          avisosCustom.map((av) => (
+                            <div key={av.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-200/70 text-xs">
+                              <span className="font-bold text-slate-800 truncate max-w-[220px]">{av.titulo}</span>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditandoAvisoId(av.id);
+                                    setNovoAvisoTitulo(av.titulo);
+                                    setNovoAvisoTexto(av.texto_aviso);
+                                  }}
+                                  className="text-blue-600 font-bold hover:underline"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    await supabase.from("avisos_customizados").delete().eq("id", av.id);
+                                    setAvisosCustom((prev) => prev.filter((item) => item.id !== av.id));
+                                  }}
+                                  className="text-red-500 font-bold hover:underline"
+                                >
+                                  Excluir
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
 
