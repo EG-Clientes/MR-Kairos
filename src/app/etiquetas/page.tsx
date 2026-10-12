@@ -492,13 +492,13 @@ export default function GeradorEtiquetasPage() {
                               <div className="flex items-baseline font-bold text-[11px] text-black tracking-tighter" style={{ fontFamily: "Century Gothic, Arial Rounded MT Bold, sans-serif" }}>
                                 <span>br</span>
                                 <span className="relative">
-                                  {/* As 4 esferas coladas sobre a haste do i */}
-                                  <span className="absolute -top-[1.2px] -left-[1.5px] flex items-end">
-                                    <span className="w-[1.6px] h-[1.6px] bg-black rounded-full mb-[0.2px]"></span>
-                                    <span className="w-[2.1px] h-[2.1px] bg-black rounded-full mb-[1.1px] ml-[0.3px]"></span>
-                                    <span className="w-[2.4px] h-[2.4px] bg-black rounded-full mb-[1.8px] ml-[0.3px]"></span>
-                                    <span className="w-[1.7px] h-[1.7px] bg-black rounded-full mb-[0.6px] ml-[0.3px]"></span>
-                                  </span>
+                                  {/* As 4 esferas em SVG puro (imune ao descarte de background na impressão) */}
+                                  <svg className="absolute -top-[4px] -left-[2px] w-4 h-3 pointer-events-none" viewBox="0 0 16 12">
+                                    <circle cx="2" cy="7" r="1.1" fill="#000" />
+                                    <circle cx="5" cy="5.2" r="1.4" fill="#000" />
+                                    <circle cx="8.5" cy="4.2" r="1.6" fill="#000" />
+                                    <circle cx="12" cy="5.8" r="1.2" fill="#000" />
+                                  </svg>
                                   ı
                                 </span>
                                 <span>cs</span>
