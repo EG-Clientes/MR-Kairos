@@ -323,17 +323,11 @@ export default function CertificadosPage() {
         throw new Error("Erro ao consultar certificados existentes: " + buscaError.message);
       }
 
-      // Conjuntos para checagem rápida de duplicidade (Case-Insensitive)
-      const registrosExistentes = new Set(
-        (certsExistentes || [])
-          .map((c) => c.numero_registro?.trim().toUpperCase())
-          .filter(Boolean)
-      );
-
-      const familiasExistentes = new Set(
-        (certsExistentes || [])
-          .map((c) => c.nome_familia?.trim().toUpperCase())
-          .filter(Boolean)
+      // Conjunto único combinando: FAMÍLIA + REGISTRO
+      const chavesExistentes = new Set(
+        (certsExistentes || []).map((c) =>
+          `${(c.nome_familia || "").trim().toUpperCase()}:::${(c.numero_registro || "").trim().toUpperCase()}`
+        )
       );
 
       // Trava adicional: impede duplicidades que estejam repetidas dentro da própria planilha
@@ -362,14 +356,10 @@ export default function CertificadosPage() {
 
         const nomeFamilia = rawFamilia || "Família sem nome";
         const numeroRegistro = rawRegistro || "Sem Registro";
-        const chaveFamilia = nomeFamilia.toUpperCase();
-        const chaveRegistro = numeroRegistro.toUpperCase();
+        const chaveComposta = `${nomeFamilia.trim().toUpperCase()}:::${numeroRegistro.trim().toUpperCase()}`;
 
         // REGRA ANTI-DUPLICIDADE: Se já existe no banco ou repetiu na planilha, ignora
-        const ehDuplicado =
-          (chaveRegistro !== "SEM REGISTRO" && registrosExistentes.has(chaveRegistro)) ||
-          (chaveRegistro === "SEM REGISTRO" && familiasExistentes.has(chaveFamilia)) ||
-          processadosNestaPlanilha.has(chaveRegistro !== "SEM REGISTRO" ? chaveRegistro : chaveFamilia);
+        const ehDuplicado = chavesExistentes.has(chaveComposta) || processadosNestaPlanilha.has(chaveComposta);
 
         if (ehDuplicado) {
           totalIgnorados++;
@@ -377,11 +367,7 @@ export default function CertificadosPage() {
         }
 
         // Marca como processado nesta rodada
-        if (chaveRegistro !== "SEM REGISTRO") {
-          processadosNestaPlanilha.add(chaveRegistro);
-        } else {
-          processadosNestaPlanilha.add(chaveFamilia);
-        }
+        processadosNestaPlanilha.add(chaveComposta);
 
         // Leitura e formatação segura das datas
         const valEmissao = row.getCell(colunaEmissao).value;
