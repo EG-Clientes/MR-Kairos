@@ -497,13 +497,14 @@ export default function LiquidificadorPage() {
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(bricsX - 2, iy + 83, 6, 8);
 
-        // Desenha as 4 esferas descendo 5px reais no Canvas para colar perfeitamente no ombro das letras
+        // 5 esferas compactas oficiais: pico no 'c' e a 5ª terminando suave antes de passar do 's'
         ctx.fillStyle = "#000000";
         [
-          { x: bricsX + 1.0, y: iy + 87.5, r: 1.6 },
-          { x: bricsX + 7.0, y: iy + 86.0, r: 1.9 },
-          { x: bricsX + 13.5, y: iy + 85.5, r: 2.2 },
-          { x: bricsX + 20.0, y: iy + 87.0, r: 1.8 },
+          { x: bricsX + 0.5, y: iy + 88.5, r: 1.3 },
+          { x: bricsX + 5.5, y: iy + 86.6, r: 1.7 },
+          { x: bricsX + 10.8, y: iy + 85.5, r: 2.2 },
+          { x: bricsX + 16.0, y: iy + 86.6, r: 1.7 },
+          { x: bricsX + 20.8, y: iy + 88.5, r: 1.3 },
         ].forEach((p) => {
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.r, 0, 2 * Math.PI);
