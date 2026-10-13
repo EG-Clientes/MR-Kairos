@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import ExcelJS from "exceljs";
 import JsBarcode from "jsbarcode";
 import ModalAviso from "@/components/ModalAviso";
+import { PDFDocument } from "pdf-lib";
 
 interface ProdutoDB {
   id: string;
@@ -191,6 +192,59 @@ export default function LiquidificadorPage() {
         mensagem: err.message || "Ocorreu um erro ao cadastrar os produtos em lote.",
       });
       setSalvandoLote(false);
+    }
+  }
+
+  // Helper para gerar apresentação em PDF formato Slide PowerPoint (16:9)
+  async function baixarApresentacaoPdf(
+    etiquetas: { fty_no: string; buffer: ArrayBuffer }[],
+    nomeArquivoOriginal: string
+  ) {
+    try {
+      setStatusMsg("Gerando apresentação em PDF das etiquetas...");
+      const pdfDoc = await PDFDocument.create();
+
+      // Dimensões do Slide PowerPoint Widescreen 16:9 (960 x 540 pt)
+      const slideWidth = 960;
+      const slideHeight = 540;
+
+      // Tamanho da etiqueta centralizada no slide (com proporção perfeita de 1200x800)
+      const labelWidth = 660;
+      const labelHeight = 440;
+      const xPos = (slideWidth - labelWidth) / 2;
+      const yPos = (slideHeight - labelHeight) / 2;
+
+      for (const item of etiquetas) {
+        const page = pdfDoc.addPage([slideWidth, slideHeight]);
+        const imgPng = await pdfDoc.embedPng(item.buffer);
+
+        page.drawImage(imgPng, {
+          x: xPos,
+          y: yPos,
+          width: labelWidth,
+          height: labelHeight,
+        });
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      const pdfBlob = new Blob([pdfBytes], { type: "application/pdf" });
+      const pdfUrl = window.URL.createObjectURL(pdfBlob);
+      const anchorPdf = document.createElement("a");
+      anchorPdf.href = pdfUrl;
+      const nomeLimpo = nomeArquivoOriginal.replace(/\.[^/.]+$/, "");
+      anchorPdf.download = `APRESENTACAO_${nomeLimpo}.pdf`;
+      anchorPdf.click();
+      window.URL.revokeObjectURL(pdfUrl);
+
+      setStatusMsg("Apresentação em PDF baixada com sucesso!");
+    } catch (err: any) {
+      console.error("Erro ao gerar PDF:", err);
+      setModalAviso({
+        isOpen: true,
+        tipo: "perigo",
+        titulo: "Erro no PDF",
+        mensagem: "Ocorreu um erro ao gerar a apresentação em PDF: " + (err.message || err),
+      });
     }
   }
 
@@ -787,6 +841,9 @@ export default function LiquidificadorPage() {
       // Largura ideal da coluna de etiquetas (32)
       worksheet.getColumn(colunaEtiqueta).width = 32;
 
+      // Array isolado apenas para armazenar as imagens para o PDF (não afeta o Excel)
+      const etiquetasParaPdf: { fty_no: string; buffer: ArrayBuffer }[] = [];
+
       for (const item of itensPlanilha) {
         const prod = produtosMap.get(item.fty_no.trim().toUpperCase());
         if (!prod) continue;
@@ -798,6 +855,12 @@ export default function LiquidificadorPage() {
         };
 
         const imgBuffer = await renderizarEtiquetaParaBuffer(prodComDescricaoPlanilha);
+
+        // Guarda cópia em memória para caso a cliente queira o PDF
+        etiquetasParaPdf.push({
+          fty_no: item.fty_no,
+          buffer: imgBuffer,
+        });
 
         const imageId = workbook.addImage({
           buffer: imgBuffer,
@@ -837,6 +900,31 @@ export default function LiquidificadorPage() {
       } else {
         setStatusMsg("Planilha gerada e baixada com sucesso!");
       }
+
+      // MODAL PÓS-DOWNLOAD: Pergunta se deseja baixar a apresentação em PDF
+      const nomeArquivoAtual = file.name;
+      setModalAviso({
+        isOpen: true,
+        tipo: "sucesso",
+        titulo: "Planilha Baixada com Sucesso!",
+        mensagem: "O arquivo Excel foi baixado perfeitamente.\n\nDeseja fazer o download da apresentação em PDF com todas as etiquetas geradas?",
+        textoConfirmar: "Baixar PDF de Apresentação",
+        textoCancelar: "Não, apenas Excel",
+        onConfirmar: async () => {
+          // Muda o texto imediatamente no clique para a cliente ver o feedback
+          setModalAviso((prev) => ({
+            ...prev,
+            textoConfirmar: "Gerando PDF...",
+          }));
+          // Respiro de 60ms para o navegador pintar a alteração visual antes de processar o PDF
+          await new Promise((resolve) => setTimeout(resolve, 60));
+          await baixarApresentacaoPdf(etiquetasParaPdf, nomeArquivoAtual);
+          setModalAviso((prev) => ({ ...prev, isOpen: false }));
+        },
+        onCancelar: () => {
+          setModalAviso((prev) => ({ ...prev, isOpen: false }));
+        },
+      });
     } catch (err: any) {
       console.error("Erro no processamento do Excel:", err);
       setModalAviso({
@@ -894,7 +982,7 @@ export default function LiquidificadorPage() {
         {/* Painel de Upload e Configuração */}
         <div className="lg:col-span-8 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-6">
           <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">
-            Configuração da Carga e Planilha (.xlsx)
+            Configuração da Planilha (.xlsx)
           </h2>
 
           {/* 1. SELETOR DE IMPORTADOR DA CARGA */}
@@ -961,7 +1049,7 @@ export default function LiquidificadorPage() {
               </div>
               <div>
                 <p className="text-sm font-bold text-slate-800">
-                  {file ? file.name : "Clique para selecionar ou arraste o arquivo Excel aqui"}
+                  {file ? file.name : "Clique para selecionar"}
                 </p>
                 <p className="text-xs text-slate-400 mt-1">Formatos aceitos: .xlsx da fábrica chinesa</p>
               </div>
@@ -1050,7 +1138,7 @@ export default function LiquidificadorPage() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
-                  <span>Executar Raio-X e Gerar Excel</span>
+                  <span>Gerar Excel</span>
                 </>
               )}
             </button>

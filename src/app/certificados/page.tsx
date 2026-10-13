@@ -3,6 +3,32 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import ModalAviso from "@/components/ModalAviso";
+import ExcelJS from "exceljs";
+// Helper para converter qualquer formato de data do Excel para YYYY-MM-DD seguro
+function converterDataExcelParaIso(valor: any): string | null {
+  if (!valor) return null;
+  if (valor instanceof Date) {
+    if (isNaN(valor.getTime())) return null;
+    return valor.toISOString().split("T")[0];
+  }
+  if (typeof valor === "string") {
+    const limpo = valor.trim();
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(limpo)) {
+      const [d, m, y] = limpo.split("/");
+      return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}/.test(limpo)) {
+      return limpo.split("T")[0];
+    }
+  }
+  if (typeof valor === "number") {
+    const date = new Date(Math.round((valor - 25569) * 86400 * 1000));
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split("T")[0];
+    }
+  }
+  return null;
+}
 // Helper para formatar data YYYY-MM-DD para DD/MM/YYYY sem sofrer desvios de fuso horário (timezone offset)
 function formatarDataSemOffset(dataString: string | null | undefined): string {
   if (!dataString) return "";
@@ -72,6 +98,16 @@ export default function CertificadosPage() {
   const [filtroFamilia, setFiltroFamilia] = useState<string>("");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [buscaCertificado, setBuscaCertificado] = useState<string>("" );
+  // Estados para o Modal de Importação em Lote via Excel
+  const [isModalExcelOpen, setIsModalExcelOpen] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [excelEmpresaId, setExcelEmpresaId] = useState<string>("");
+  const [colunaFamilia, setColunaFamilia] = useState<string>("C");
+  const [colunaRegistro, setColunaRegistro] = useState<string>("I");
+  const [colunaValidade, setColunaValidade] = useState<string>("F");
+  const [colunaEmissao, setColunaEmissao] = useState<string>("D");
+  const [colunaCodigoOcp, setColunaCodigoOcp] = useState<string>("B");
+  const [importandoExcel, setImportandoExcel] = useState(false);
 
   // Estado do Modal Bonitão
   const [modalAviso, setModalAviso] = useState<{
@@ -190,7 +226,7 @@ export default function CertificadosPage() {
   }
 
 
-  // Salvar ou Atualizar
+  // Salvar ou Atualizar Manual (Original Intacto)
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -240,7 +276,185 @@ export default function CertificadosPage() {
     }
   }
 
-  // --- LÓGICA DE FILTRAGEM & ALERTAS EM MEMÓRIA ---
+  // Processamento e Cadastro em Lote via Excel com Trava Anti-Duplicidade
+  async function handleImportarExcelCertificados(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!excelFile) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Arquivo Obrigatório",
+        mensagem: "Selecione o arquivo Excel (.xlsx) contendo os certificados.",
+      });
+      return;
+    }
+
+    if (!excelEmpresaId) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Importador Obrigatório",
+        mensagem: "Selecione a qual importador estes certificados pertencem.",
+      });
+      return;
+    }
+
+    setImportandoExcel(true);
+
+    try {
+      const buffer = await excelFile.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+
+      // Regra de Ouro da Operação: Lê exclusivamente a primeira aba da planilha
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        throw new Error("Nenhuma aba encontrada na planilha.");
+      }
+
+      // 1. Busca todos os certificados já existentes no banco para esse importador
+      const { data: certsExistentes, error: buscaError } = await supabase
+        .from("inmetro_familias")
+        .select("numero_registro, nome_familia")
+        .eq("empresa_id", excelEmpresaId);
+
+      if (buscaError) {
+        throw new Error("Erro ao consultar certificados existentes: " + buscaError.message);
+      }
+
+      // Conjuntos para checagem rápida de duplicidade (Case-Insensitive)
+      const registrosExistentes = new Set(
+        (certsExistentes || [])
+          .map((c) => c.numero_registro?.trim().toUpperCase())
+          .filter(Boolean)
+      );
+
+      const familiasExistentes = new Set(
+        (certsExistentes || [])
+          .map((c) => c.nome_familia?.trim().toUpperCase())
+          .filter(Boolean)
+      );
+
+      // Trava adicional: impede duplicidades que estejam repetidas dentro da própria planilha
+      const processadosNestaPlanilha = new Set<string>();
+
+      const novosParaInserir: any[] = [];
+      let totalIgnorados = 0;
+      let comecouDados = false;
+
+      worksheet.eachRow((row) => {
+        const rawFamilia = row.getCell(colunaFamilia).text?.trim();
+        const rawRegistro = row.getCell(colunaRegistro).text?.trim();
+
+        // Detecta cabeçalho
+        if (!comecouDados) {
+          const termosCabecalho = ["FAMÍLIA", "FAMILIA", "REGISTRO", "EMISSÃO", "EMISSAO", "VALIDADE", "CERTIFICADO"];
+          const ehCabecalho = rawFamilia && termosCabecalho.some((t) => rawFamilia.toUpperCase().includes(t));
+          if (ehCabecalho) {
+            comecouDados = true;
+          }
+          return;
+        }
+
+        // Pula linhas em branco
+        if (!rawFamilia && !rawRegistro) return;
+
+        const nomeFamilia = rawFamilia || "Família sem nome";
+        const numeroRegistro = rawRegistro || "Sem Registro";
+        const chaveFamilia = nomeFamilia.toUpperCase();
+        const chaveRegistro = numeroRegistro.toUpperCase();
+
+        // REGRA ANTI-DUPLICIDADE: Se já existe no banco ou repetiu na planilha, ignora
+        const ehDuplicado =
+          (chaveRegistro !== "SEM REGISTRO" && registrosExistentes.has(chaveRegistro)) ||
+          (chaveRegistro === "SEM REGISTRO" && familiasExistentes.has(chaveFamilia)) ||
+          processadosNestaPlanilha.has(chaveRegistro !== "SEM REGISTRO" ? chaveRegistro : chaveFamilia);
+
+        if (ehDuplicado) {
+          totalIgnorados++;
+          return;
+        }
+
+        // Marca como processado nesta rodada
+        if (chaveRegistro !== "SEM REGISTRO") {
+          processadosNestaPlanilha.add(chaveRegistro);
+        } else {
+          processadosNestaPlanilha.add(chaveFamilia);
+        }
+
+        // Leitura e formatação segura das datas
+        const valEmissao = row.getCell(colunaEmissao).value;
+        const valValidade = row.getCell(colunaValidade).value;
+        const celulaOcp = row.getCell(colunaCodigoOcp);
+        const rawCodigoOcp = (celulaOcp.text || (celulaOcp.value !== null && celulaOcp.value !== undefined ? String(celulaOcp.value) : "")).trim();
+
+        const dataEmissaoIso = converterDataExcelParaIso(valEmissao) || new Date().toISOString().split("T")[0];
+        const dataValidadeIso = converterDataExcelParaIso(valValidade) || new Date().toISOString().split("T")[0];
+
+        // Se o registro for 'Sem Registro', define status correto
+        const statusFinal = numeroRegistro === "Sem Registro" ? "Sem Registro" : "Ativo";
+
+        novosParaInserir.push({
+          empresa_id: excelEmpresaId,
+          nome_familia: nomeFamilia,
+          numero_registro: numeroRegistro,
+          data_emissao: dataEmissaoIso,
+          data_validade: dataValidadeIso,
+          status: statusFinal,
+          ocp_nome: "brics",
+          ocp_numero: "0098",
+          codigo_ocp: rawCodigoOcp || null,
+        });
+      });
+
+      if (novosParaInserir.length === 0) {
+        setImportandoExcel(false);
+        setIsModalExcelOpen(false);
+        setModalAviso({
+          isOpen: true,
+          tipo: "alerta",
+          titulo: "Nenhum Novo Certificado",
+          mensagem: totalIgnorados > 0
+            ? `Todos os ${totalIgnorados} certificados desta planilha já estavam cadastrados no sistema e foram ignorados.`
+            : "Nenhum certificado válido foi localizado na planilha.",
+        });
+        return;
+      }
+
+      // 2. Insere apenas os novos em lote no banco
+      const { error: insertError } = await supabase
+        .from("inmetro_familias")
+        .insert(novosParaInserir);
+
+      if (insertError) {
+        throw new Error("Erro ao salvar certificados: " + insertError.message);
+      }
+
+      // 3. Atualiza os dados na tela e fecha o modal
+      await carregarDados();
+      setIsModalExcelOpen(false);
+      setExcelFile(null);
+
+      // 4. Modal com o resumo transparente para a cliente
+      setModalAviso({
+        isOpen: true,
+        tipo: "sucesso",
+        titulo: "Importação Concluída com Sucesso!",
+        mensagem: `• ${novosParaInserir.length} novo(s) certificado(s) cadastrado(s).\n• ${totalIgnorados} certificado(s) já existiam no banco e foram ignorados com segurança.`,
+      });
+    } catch (err: any) {
+      console.error("Erro na importação:", err);
+      setModalAviso({
+        isOpen: true,
+        tipo: "perigo",
+        titulo: "Erro na Importação",
+        mensagem: err.message || "Ocorreu um erro ao processar a planilha de certificados.",
+      });
+    } finally {
+      setImportandoExcel(false);
+    }
+  }
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
 
@@ -299,16 +513,35 @@ export default function CertificadosPage() {
             Gerencie as famílias certificadas e monitore os prazos de validade.
           </p>
         </div>
-        <button
-          onClick={handleNovo}
-          disabled={empresas.length === 0}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 disabled:opacity-50 self-start sm:self-auto"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-          </svg>
-          <span>Novo Certificado</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+          {/* Botão Novo: Importar via Excel */}
+          <button
+            onClick={() => {
+              setExcelFile(null);
+              setExcelEmpresaId(filtroEmpresa || "");
+              setIsModalExcelOpen(true);
+            }}
+            disabled={empresas.length === 0}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <span>Importar Planilha</span>
+          </button>
+
+          {/* Botão Manual Original (100% intacto) */}
+          <button
+            onClick={handleNovo}
+            disabled={empresas.length === 0}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Novo Certificado</span>
+          </button>
+        </div>
       </div>
 
       {/* BANNER DE ALERTA DE COMPLIANCE */}
@@ -696,7 +929,7 @@ export default function CertificadosPage() {
                 </div>
               </div>
 
-              {/* Botões de Ação */}
+              {/* Botões de Ação Originais (100% Intactos) */}
               <div className="pt-3 border-t border-slate-100 flex justify-end space-x-3">
                 <button
                   type="button"
@@ -718,7 +951,194 @@ export default function CertificadosPage() {
         </div>
       )}
 
-      {/* CARD ELEGANTE DE CONFIRMAÇÃO / AVISO */}
+      {/* NOVO MODAL: IMPORTAÇÃO EM LOTE VIA EXCEL */}
+      {isModalExcelOpen && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full p-6 space-y-5 overflow-y-auto max-h-[92vh] animate-in fade-in zoom-in duration-150">
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-200">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Importar Certificados via Excel</h3>
+                  <p className="text-xs text-slate-500">Cadastre múltiplos certificados de uma vez a partir da primeira aba.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsModalExcelOpen(false)}
+                className="text-slate-400 hover:text-slate-700 p-2 rounded-xl hover:bg-slate-100 transition"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleImportarExcelCertificados} className="space-y-4">
+              {/* 1. Seleção do Importador */}
+              <div>
+                <label className="block text-xs font-bold text-slate-900 mb-1">
+                  Importador Dono destes Certificados *
+                </label>
+                <select
+                  required
+                  value={excelEmpresaId}
+                  onChange={(e) => setExcelEmpresaId(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white text-slate-900 font-semibold focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10 outline-none transition"
+                >
+                  <option value="">-- Selecione o Importador --</option>
+                  {empresas.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.razao_social}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1">Apenas importadores previamente cadastrados no sistema.</p>
+              </div>
+
+              {/* 2. Upload do Arquivo */}
+              <div className="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center hover:border-emerald-500 transition-colors bg-slate-50/50">
+                <input
+                  type="file"
+                  id="excel-cert-upload"
+                  accept=".xlsx, .xls"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) setExcelFile(f);
+                  }}
+                  className="hidden"
+                />
+                <label htmlFor="excel-cert-upload" className="cursor-pointer flex flex-col items-center space-y-2">
+                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">
+                      {excelFile ? excelFile.name : "Clique para selecionar a planilha de certificados"}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">O sistema lerá os dados da primeira aba da planilha</p>
+                  </div>
+                </label>
+              </div>
+
+              {/* 3. Seleção de Colunas */}
+              <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80 space-y-2.5">
+                <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block">
+                  Mapeamento de Colunas da Planilha
+                </span>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Nome da Família *
+                    </label>
+                    <select
+                      value={colunaFamilia}
+                      onChange={(e) => setColunaFamilia(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Nº do Registro Inmetro *
+                    </label>
+                    <select
+                      value={colunaRegistro}
+                      onChange={(e) => setColunaRegistro(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Data de Validade *
+                    </label>
+                    <select
+                      value={colunaValidade}
+                      onChange={(e) => setColunaValidade(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Data de Emissão
+                    </label>
+                    <select
+                      value={colunaEmissao}
+                      onChange={(e) => setColunaEmissao(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Cód. Certificado / OCP 
+                    </label>
+                    <select
+                      value={colunaCodigoOcp}
+                      onChange={(e) => setColunaCodigoOcp(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botões */}
+              <div className="pt-3 border-t border-slate-100 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalExcelOpen(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={importandoExcel || !excelFile || !excelEmpresaId}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm hover:shadow-md transition flex items-center space-x-2 disabled:opacity-50"
+                >
+                  {importandoExcel ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white"></div>
+                      <span>Importando Certificados...</span>
+                    </>
+                  ) : (
+                    <span>Processar e Cadastrar</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       <ModalAviso
         isOpen={modalAviso.isOpen}
         tipo={modalAviso.tipo}
