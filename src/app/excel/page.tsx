@@ -227,7 +227,7 @@ export default function LiquidificadorPage() {
       }
 
       const pdfBytes = await pdfDoc.save();
-      const pdfBlob = new Blob([pdfBytes], { type: "application/pdf" });
+      const pdfBlob = new Blob([pdfBytes as any], { type: "application/pdf" });
       const pdfUrl = window.URL.createObjectURL(pdfBlob);
       const anchorPdf = document.createElement("a");
       anchorPdf.href = pdfUrl;
