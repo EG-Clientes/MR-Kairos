@@ -160,7 +160,7 @@ export default function LiquidificadorPage() {
         partes_pequenas: true,
         metal: false,
         restritivo_0_3_anos: true,
-        idade_minima: "3 anos",
+        idade_minima: "3 ANOS",
       }));
 
       const { error } = await supabase.from("produtos").insert(novosRegistros);
@@ -317,7 +317,7 @@ export default function LiquidificadorPage() {
         }
       });
 
-      const idadeFormatada = (prod.idade_minima || "3 ANOS").replace(/^\+/, "").trim();
+      const idadeFormatada = (prod.idade_minima || "3 ANOS").replace(/^\+/, "").trim().toUpperCase();
       ctx.font = `900 ${fontSize + 2}px Arial, Helvetica, sans-serif`;
       ctx.fillText(`INDICADO PARA CRIANÇAS MAIORES DE ${idadeFormatada}.`, 520, yPos + 6);
       ctx.font = `bold ${fontSize - 1}px Arial, Helvetica, sans-serif`;
@@ -411,11 +411,11 @@ export default function LiquidificadorPage() {
       // Endereço (com quebra inteligente se passar de 480px)
       ctx.font = "14px Arial, Helvetica, sans-serif";
       const endTexto = `Endereço: ${prod.empresas?.endereco || "Não informado"}`;
-      if (ctx.measureText(endTexto).width > 480) {
+      if (ctx.measureText(endTexto).width > 410) {
         const palavrasEnd = endTexto.split(" ");
         let l1 = "", l2 = "";
         palavrasEnd.forEach((p) => {
-          if (ctx.measureText(l1 + p + " ").width < 470 && !l2) l1 += p + " ";
+          if (ctx.measureText(l1 + p + " ").width < 415 && !l2) l1 += p + " ";
           else l2 += p + " ";
         });
         ctx.fillText(l1, 35, dy);
@@ -490,47 +490,57 @@ export default function LiquidificadorPage() {
         // Sub-bloco BRICS (Lado Esquerdo)
         const bricsX = ix + 56;
         ctx.textAlign = "center";
-        ctx.font = "bold 27px 'Century Gothic', Arial, sans-serif";
+        ctx.font = "600 27px 'Century Gothic', Arial, sans-serif";
         ctx.fillText("brics", bricsX, iy + 106);
 
-        // 4 esferas coladas sobre o 'i' da marca BRICS
-        ctx.beginPath();
-        ctx.arc(bricsX - 3.5, iy + 87, 2.0, 0, 2 * Math.PI);
-        ctx.arc(bricsX - 1.5, iy + 84, 2.4, 0, 2 * Math.PI);
-        ctx.arc(bricsX + 1.2, iy + 82, 2.7, 0, 2 * Math.PI);
-        ctx.arc(bricsX + 3.8, iy + 85, 2.1, 0, 2 * Math.PI);
-        ctx.fill();
+        // Apaga o pingo natural do 'i' para dar lugar à curva oficial
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(bricsX - 2, iy + 83, 6, 8);
+
+        // Desenha as 4 esferas descendo 5px reais no Canvas para colar perfeitamente no ombro das letras
+        ctx.fillStyle = "#000000";
+        [
+          { x: bricsX + 1.0, y: iy + 87.5, r: 1.6 },
+          { x: bricsX + 7.0, y: iy + 86.0, r: 1.9 },
+          { x: bricsX + 13.5, y: iy + 85.5, r: 2.2 },
+          { x: bricsX + 20.0, y: iy + 87.0, r: 1.8 },
+        ].forEach((p) => {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, 2 * Math.PI);
+          ctx.fill();
+        });
 
         ctx.font = "bold 12.5px Arial, Helvetica, sans-serif";
         const textoOcp = prod.inmetro_familias.codigo_ocp 
           ? prod.inmetro_familias.codigo_ocp 
           : `OCP ${prod.inmetro_familias.ocp_numero || "0098"}`;
-        ctx.fillText(textoOcp, bricsX, iy + 128);
+        ctx.fillText(textoOcp, bricsX, iy + 142);
 
-        // Sub-bloco INMETRO (Fenda diagonal branca limpa e mais grossa, sem risco)
+        // Sub-bloco INMETRO (Altura máxima oficial e palavra 100% contida na barra)
         const inmx = ix + 138;
-        const inmy = iy + 74;
+        const inmy = iy + 62;
         ctx.fillStyle = "#000000";
         // Barra Superior
         ctx.fillRect(inmx, inmy, 64, 8.5);
-        // Barra Inferior
-        ctx.fillRect(inmx, inmy + 44, 64, 8.5);
-        // Triângulo Superior Preto (recuado para abrir a fenda branca)
+        // Barra Inferior (mais alta, igual à proporção da cliente)
+        ctx.fillRect(inmx, inmy + 59, 64, 8.5);
+        // Triângulo Superior Preto (Corpo mais encorpado e gordinho)
         ctx.beginPath();
-        ctx.moveTo(inmx + 25, inmy + 8.5);
-        ctx.lineTo(inmx + 44, inmy + 8.5);
-        ctx.lineTo(inmx + 44, inmy + 30);
+        ctx.moveTo(inmx + 23, inmy + 8.5);
+        ctx.lineTo(inmx + 46, inmy + 8.5);
+        ctx.lineTo(inmx + 46, inmy + 41);
         ctx.fill();
-        // Triângulo Inferior Preto (recuado para abrir a fenda branca)
+        // Triângulo Inferior Preto (Corpo mais encorpado e gordinho)
         ctx.beginPath();
-        ctx.moveTo(inmx + 20, inmy + 22.5);
-        ctx.lineTo(inmx + 20, inmy + 44);
-        ctx.lineTo(inmx + 39, inmy + 44);
+        ctx.moveTo(inmx + 18, inmy + 26.5);
+        ctx.lineTo(inmx + 18, inmy + 59);
+        ctx.lineTo(inmx + 41, inmy + 59);
         ctx.fill();
 
-        ctx.font = "900 italic 14.5px Arial, Helvetica, sans-serif";
+        // Fonte em 13px para a palavra ficar EXATAMENTE da largura da barra, sem passar
+        ctx.font = "900 italic 13px Arial, Helvetica, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("INMETRO", inmx + 32, inmy + 65);
+        ctx.fillText("INMETRO", inmx + 32, inmy + 79);
 
         // Rodapé: REGISTRO + Número
         ctx.font = "bold 12.5px Arial, Helvetica, sans-serif";

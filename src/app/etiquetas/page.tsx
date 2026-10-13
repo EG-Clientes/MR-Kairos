@@ -554,7 +554,7 @@ export default function GeradorEtiquetasPage() {
                                 {/* Triângulo Inferior Preto */}
                                 <polygon points="16,21 16,39 32,39" fill="#000" />
                               </svg>
-                              <span className="text-[6.5px] font-black italic tracking-tighter text-black mt-0.5">
+                              <span className="text-[6.5px] font-black italic tracking-tighter text-black leading-none mt-[1px]">
                                 INMETRO
                               </span>
                             </div>
