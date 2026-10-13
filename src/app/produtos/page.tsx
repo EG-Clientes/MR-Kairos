@@ -76,6 +76,76 @@ export default function ProdutosPage() {
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [buscaNome, setBuscaNome] = useState<string>("");
 
+  // Estados da Seleção em Massa Dinâmica
+  const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [familiaLoteId, setFamiliaLoteId] = useState<string>("");
+  const [vinculandoLote, setVinculandoLote] = useState(false);
+
+  // Identificação inteligente de Multi-Tenant na seleção
+  const produtosSelecionadosObjetos = produtos.filter((p) => selecionados.includes(p.id));
+  const empresasUnicas = Array.from(new Set(produtosSelecionadosObjetos.map((p) => p.empresa_id)));
+  const ehMesmaEmpresa = empresasUnicas.length === 1;
+  const empresaUnicaId = ehMesmaEmpresa ? empresasUnicas[0] : null;
+  const familiasParaLote = empresaUnicaId
+    ? familias.filter((f) => f.empresa_id === empresaUnicaId)
+    : [];
+
+  // Alternar seleção de um item individual
+  function toggleSelecionarItem(id: string) {
+    setSelecionados((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  // Alternar "Selecionar Todos" os produtos que estão visíveis na tela
+  function toggleSelecionarTodos() {
+    const idsVisiveis = produtosExibidos.map((p) => p.id);
+    const todosJaMarcados = idsVisiveis.length > 0 && idsVisiveis.every((id) => selecionados.includes(id));
+
+    if (todosJaMarcados) {
+      // Remove da seleção apenas os que estão na tela
+      setSelecionados((prev) => prev.filter((id) => !idsVisiveis.includes(id)));
+    } else {
+      // Adiciona todos os visíveis na seleção sem duplicar
+      setSelecionados((prev) => Array.from(new Set([...prev, ...idsVisiveis])));
+    }
+  }
+
+  // Ação de vincular no banco via Supabase
+  async function handleVincularFamiliaLote() {
+    if (!familiaLoteId || selecionados.length === 0 || !ehMesmaEmpresa) return;
+
+    setVinculandoLote(true);
+    try {
+      const { error } = await supabase
+        .from("produtos")
+        .update({ familia_id: familiaLoteId })
+        .in("id", selecionados);
+
+      if (error) throw error;
+
+      setModalAviso({
+        isOpen: true,
+        tipo: "sucesso",
+        titulo: "Vínculo em Lote Concluído!",
+        mensagem: `${selecionados.length} produto(s) foram vinculados à família Inmetro com sucesso.`,
+      });
+
+      setSelecionados([]);
+      setFamiliaLoteId("");
+      await carregarDados();
+    } catch (err: any) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "perigo",
+        titulo: "Erro no Vínculo em Lote",
+        mensagem: err.message || "Não foi possível vincular os certificados.",
+      });
+    } finally {
+      setVinculandoLote(false);
+    }
+  }
+
   // Estados dos Avisos Customizados & Gaveta Lateral
   const [avisosCustom, setAvisosCustom] = useState<{ id: string; empresa_id: string | null; titulo: string; texto_aviso: string }[]>([]);
   const [abaGerenciador, setAbaGerenciador] = useState(false);
@@ -629,18 +699,44 @@ export default function ProdutosPage() {
             <table className="min-w-full divide-y divide-slate-100">
               <thead className="bg-slate-50/50">
                 <tr className="text-left text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-3.5 pl-5 pr-2 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        produtosExibidos.length > 0 &&
+                        produtosExibidos.every((p) => selecionados.includes(p.id))
+                      }
+                      onChange={toggleSelecionarTodos}
+                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer align-middle"
+                      title="Selecionar / Desmarcar todos os visíveis"
+                    />
+                  </th>
                   <th className="py-3.5 px-6">Importador</th>
                   <th className="py-3.5 px-6">Código (FTY NO)</th>
                   <th className="py-3.5 px-6">EAN-13</th>
                   <th className="py-3.5 px-6">Descrição Comercial</th>
                   <th className="py-3.5 px-6">Família Inmetro</th>
-                  <th className="py-3.5 px-6">Sinalizadores Legais</th>
                   <th className="py-3.5 px-6 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {produtosExibidos.map((prod) => (
-                  <tr key={prod.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr
+                    key={prod.id}
+                    className={`transition-colors ${
+                      selecionados.includes(prod.id)
+                        ? "bg-blue-50/50 hover:bg-blue-50/70"
+                        : "hover:bg-slate-50/60"
+                    }`}
+                  >
+                    <td className="py-3.5 pl-5 pr-2 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selecionados.includes(prod.id)}
+                        onChange={() => toggleSelecionarItem(prod.id)}
+                        className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer align-middle"
+                      />
+                    </td>
                     <td className="py-3.5 px-6 whitespace-nowrap">
                       {prod.empresas?.razao_social ? (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 tracking-wide uppercase">
@@ -659,43 +755,14 @@ export default function ProdutosPage() {
                     <td className="py-3.5 px-6 text-slate-700 font-medium max-w-[280px] truncate" title={prod.descricao}>
                       {prod.descricao}
                     </td>
-                    <td className="py-4 px-6 text-slate-500 text-xs">
+                    <td className="py-3.5 px-6 text-slate-700 text-xs font-medium">
                       {prod.inmetro_familias?.nome_familia ? (
-                        <span className="font-medium text-slate-700">{prod.inmetro_familias.nome_familia}</span>
+                        <span className="leading-relaxed block">{prod.inmetro_familias.nome_familia}</span>
                       ) : (
-                        <span className="text-amber-600 font-semibold bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-full text-[11px]">
+                        <span className="text-amber-600 font-semibold bg-amber-50 border border-amber-200/60 px-2.5 py-1 rounded-md text-[11px] whitespace-nowrap">
                           Sem Registro
                         </span>
                       )}
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex flex-wrap gap-1 max-w-xs">
-                        {prod.usa_pilha && (
-                          <span className="bg-purple-50 text-purple-700 border border-purple-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                            Pilha
-                          </span>
-                        )}
-                        {prod.contem_ima && (
-                          <span className="bg-red-50 text-red-700 border border-red-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                            Ímã
-                          </span>
-                        )}
-                        {prod.partes_pequenas && (
-                          <span className="bg-orange-50 text-orange-700 border border-orange-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                            Partes Peq.
-                          </span>
-                        )}
-                        {prod.metal && (
-                          <span className="bg-blue-50 text-blue-700 border border-blue-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                            Metal
-                          </span>
-                        )}
-                        {prod.restritivo_0_3_anos && (
-                          <span className="bg-rose-50 text-rose-700 border border-rose-200/60 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                            0-3 Anos
-                          </span>
-                        )}
-                      </div>
                     </td>
                     <td className="py-4 px-6 text-right space-x-2 whitespace-nowrap">
                       <button
@@ -1107,6 +1174,87 @@ export default function ProdutosPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* BARRA FLUTUANTE DINÂMICA DE AÇÕES EM LOTE */}
+      {selecionados.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-full max-w-4xl px-4 animate-in fade-in slide-in-from-bottom-5 duration-200">
+          <div className="bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-800 p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+            
+            {/* Lado Esquerdo: Contagem e Identificação */}
+            <div className="flex items-center gap-3">
+              <span className="bg-blue-600 text-white text-xs font-black px-3 py-1.5 rounded-xl shadow-xs">
+                {selecionados.length} {selecionados.length === 1 ? "item selecionado" : "itens selecionados"}
+              </span>
+
+              {ehMesmaEmpresa ? (
+                <div className="text-xs text-slate-300">
+                  Importador:{" "}
+                  <strong className="text-white uppercase font-bold">
+                    {empresas.find((e) => e.id === empresaUnicaId)?.razao_social}
+                  </strong>
+                </div>
+              ) : (
+                <div className="text-xs text-amber-400 font-semibold flex items-center gap-1.5">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span>Múltiplos importadores selecionados. Filtre por importador.</span>
+                </div>
+              )}
+            </div>
+
+            {/* Lado Direito: Ações */}
+            <div className="flex items-center gap-2.5 w-full md:w-auto justify-end">
+              {ehMesmaEmpresa && (
+                <>
+                  <select
+                    value={familiaLoteId}
+                    onChange={(e) => setFamiliaLoteId(e.target.value)}
+                    className="bg-slate-800 text-white border border-slate-700 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium max-w-xs"
+                  >
+                    <option value="">- Selecione o Certificado -</option>
+                    {familiasParaLote.map((fam) => (
+                      <option key={fam.id} value={fam.id}>
+                        {fam.nome_familia}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={handleVincularFamiliaLote}
+                    disabled={!familiaLoteId || vinculandoLote}
+                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 whitespace-nowrap"
+                  >
+                    {vinculandoLote ? (
+                      <span>Vinculando...</span>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>Aplicar em Lote</span>
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelecionados([]);
+                  setFamiliaLoteId("");
+                }}
+                className="text-xs text-slate-400 hover:text-white px-3 py-2 rounded-xl hover:bg-slate-800 transition"
+              >
+                Limpar
+              </button>
+            </div>
+
           </div>
         </div>
       )}
