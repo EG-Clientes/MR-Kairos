@@ -538,10 +538,16 @@ export default function LiquidificadorPage() {
         ctx.lineTo(inmx + 41, inmy + 59);
         ctx.fill();
 
-        // Fonte em 13px para a palavra ficar EXATAMENTE da largura da barra, sem passar
+        // Risquinhos finos oficiais de ponta a ponta (levemente suavizados/mais claros)
+        ctx.fillStyle = "rgba(0, 0, 0, 0.82)";
+        ctx.fillRect(inmx + 18, inmy + 7.5, 0.75, 20);
+        ctx.fillRect(inmx + 45.25, inmy + 40, 0.75, 20);
+        ctx.fillStyle = "#000000";
+
+        // Fonte em 13px com respiro calibrado levemente mais abaixo do selo
         ctx.font = "900 italic 13px Arial, Helvetica, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("INMETRO", inmx + 32, inmy + 79);
+        ctx.fillText("INMETRO", inmx + 32, inmy + 81);
 
         // Rodapé: REGISTRO + Número
         ctx.font = "bold 12.5px Arial, Helvetica, sans-serif";

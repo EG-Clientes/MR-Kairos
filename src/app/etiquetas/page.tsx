@@ -521,40 +521,46 @@ export default function GeradorEtiquetasPage() {
                           <div className="w-full flex items-center justify-between px-1">
                             {/* Logo Oficial BRICS */}
                             <div className="flex flex-col items-center">
-                              <div className="flex items-baseline font-bold text-[11px] text-black tracking-tighter" style={{ fontFamily: "Century Gothic, Arial Rounded MT Bold, sans-serif" }}>
+                              <div className="flex items-baseline font-bold text-[11px] text-black tracking-tighter translate-y-[1.5px]" style={{ fontFamily: "Century Gothic, Arial, sans-serif" }}>
                                 <span>br</span>
                                 <span className="relative">
-                                  {/* As 4 esferas em SVG puro (imune ao descarte de background na impressão) */}
-                                  <svg className="absolute -top-[4px] -left-[2px] w-4 h-3 pointer-events-none" viewBox="0 0 16 12">
-                                    <circle cx="2" cy="7" r="1.1" fill="#000" />
-                                    <circle cx="5" cy="5.2" r="1.4" fill="#000" />
-                                    <circle cx="8.5" cy="4.2" r="1.6" fill="#000" />
-                                    <circle cx="12" cy="5.8" r="1.2" fill="#000" />
+                                  {/* As 5 esferas coladas no teto das letras, arco suave do 'i' ao início do 's' */}
+                                  <svg className="absolute top-[1.5px] -left-[1px] w-[12px] h-[5px] pointer-events-none" viewBox="0 0 13 5">
+                                    <circle cx="2.0" cy="2.8" r="0.85" fill="#000" />
+                                    <circle cx="4.4" cy="2.2" r="1.05" fill="#000" />
+                                    <circle cx="6.9" cy="1.8" r="1.3" fill="#000" />
+                                    <circle cx="9.3" cy="2.2" r="1.05" fill="#000" />
+                                    <circle cx="11.4" cy="2.8" r="0.75" fill="#000" opacity="0.75" />
                                   </svg>
                                   ı
                                 </span>
                                 <span>cs</span>
                               </div>
-                              <span className="text-[5.5px] font-bold text-black tracking-tight mt-0.5 whitespace-nowrap">
+                              <span className="text-[5.5px] font-bold text-black tracking-tight mt-[7.5px] translate-y-[4.5px] whitespace-nowrap">
                                 {produtoSelecionado.inmetro_familias.codigo_ocp 
                                   ? produtoSelecionado.inmetro_familias.codigo_ocp 
                                   : `OCP ${produtoSelecionado.inmetro_familias.ocp_numero || "0098"}`}
                               </span>
                             </div>
 
-                            {/* Logo Oficial INMETRO (Fenda do N mais grossa e limpa, sem risco) */}
+                            {/* Logo Oficial INMETRO (Idêntico ao padrão Excel: mais alto com as hastes laterais) */}
                             <div className="flex flex-col items-center pl-1">
-                              <svg className="w-7 h-6" viewBox="0 0 52 46">
+                              <svg className="w-[28px] h-[30px]" viewBox="0 0 64 68">
                                 {/* Barra Superior */}
-                                <rect x="0" y="0" width="52" height="7" fill="#000" />
+                                <rect x="0" y="0" width="64" height="8.5" fill="#000" />
                                 {/* Barra Inferior */}
-                                <rect x="0" y="39" width="52" height="7" fill="#000" />
+                                <rect x="0" y="59.5" width="64" height="8.5" fill="#000" />
+
                                 {/* Triângulo Superior Preto */}
-                                <polygon points="20,7 36,7 36,25" fill="#000" />
+                                <polygon points="23,8.5 46,8.5 46,41" fill="#000" />
                                 {/* Triângulo Inferior Preto */}
-                                <polygon points="16,21 16,39 32,39" fill="#000" />
+                                <polygon points="18,26.5 18,59.5 41,59.5" fill="#000" />
+
+                                {/* As duas hastes verticais contínuas das extremidades */}
+                                <rect x="18" y="8.5" width="0.75" height="19" fill="#000" opacity="0.68" />
+                                <rect x="45.25" y="40" width="0.75" height="20" fill="#000" opacity="0.68" />
                               </svg>
-                              <span className="text-[6.5px] font-black italic tracking-tighter text-black leading-none mt-[1px]">
+                              <span className="text-[6.5px] font-black italic tracking-tight text-black leading-none mt-[0.5px]">
                                 INMETRO
                               </span>
                             </div>
