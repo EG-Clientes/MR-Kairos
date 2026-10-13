@@ -478,7 +478,7 @@ export default function CertificadosPage() {
     if (filtroStatus !== "todos") {
       const statusObj = obterStatusDinamico(cert.data_validade, cert.status);
       if (filtroStatus === "em_risco") {
-        return statusObj.rotulo === "Vencido" || statusObj.rotulo.startsWith("Vence em");
+        return statusObj.rotulo === "Vencido" || statusObj.rotulo.startsWith("Vence em") || statusObj.rotulo === "Sem Registro";
       }
       if (filtroStatus === "vencido") return statusObj.rotulo === "Vencido";
       if (filtroStatus === "vencendo") return statusObj.rotulo.startsWith("Vence em");
