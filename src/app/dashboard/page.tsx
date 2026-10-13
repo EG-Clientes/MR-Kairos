@@ -255,7 +255,11 @@ export default async function Home() {
                       <td className="py-4 px-6 text-slate-700 font-medium">{cert.nome_familia}</td>
                       <td className="py-4 px-6 text-slate-500 font-mono text-xs">{cert.numero_registro}</td>
                       <td className="py-4 px-6">
-                        {ehVencido ? (
+                        {cert.status === "Sem Registro" ? (
+                          <span className="bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 py-1 rounded-full">
+                            Sem Registro
+                          </span>
+                        ) : ehVencido ? (
                           <span className="bg-red-100 text-red-800 text-xs font-semibold px-2.5 py-1 rounded-full">
                             Vencido
                           </span>
