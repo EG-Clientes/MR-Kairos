@@ -98,15 +98,27 @@ export default function CertificadosPage() {
   const [filtroFamilia, setFiltroFamilia] = useState<string>("");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [buscaCertificado, setBuscaCertificado] = useState<string>("" );
-  // Estados para o Modal de Importação em Lote via Excel
+  // Gera lista completa de colunas de A até AZ (cobre planilhas gigantes de até 52 colunas)
+  const OPCOES_COLUNAS_EXCEL = [
+    ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""),
+    ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((c) => "A" + c),
+  ];
+
+  // Estados para o Modal de Importação em Lote via Excel (Padrão desmarcado e flexível)
   const [isModalExcelOpen, setIsModalExcelOpen] = useState(false);
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelEmpresaId, setExcelEmpresaId] = useState<string>("");
-  const [colunaFamilia, setColunaFamilia] = useState<string>("C");
-  const [colunaRegistro, setColunaRegistro] = useState<string>("I");
-  const [colunaValidade, setColunaValidade] = useState<string>("F");
-  const [colunaEmissao, setColunaEmissao] = useState<string>("D");
-  const [colunaCodigoOcp, setColunaCodigoOcp] = useState<string>("B");
+  const [colunaFamilia, setColunaFamilia] = useState<string>("");
+  const [colunaRegistro, setColunaRegistro] = useState<string>("");
+  const [colunaValidade, setColunaValidade] = useState<string>("");
+  const [colunaEmissao, setColunaEmissao] = useState<string>("");
+  const [colunaCodigoOcp, setColunaCodigoOcp] = useState<string>("");
+  
+  // Campos de Fallback caso a planilha seja um Memorial (sem coluna de Registro/Validade)
+  const [fallbackRegistro, setFallbackRegistro] = useState<string>("");
+  const [fallbackValidade, setFallbackValidade] = useState<string>("");
+  const [fallbackEmissao, setFallbackEmissao] = useState<string>("");
+  const [linhaInicio, setLinhaInicio] = useState<string>(""); // Linha exata onde começam os dados
   const [importandoExcel, setImportandoExcel] = useState(false);
 
   // Estado do Modal Bonitão
@@ -300,6 +312,88 @@ export default function CertificadosPage() {
       return;
     }
 
+    const linhaNum = parseInt(linhaInicio.trim(), 10);
+    if (!linhaInicio.trim() || isNaN(linhaNum) || linhaNum < 1) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Linha Inicial Obrigatória",
+        mensagem: "Informe o número da linha onde começam os certificados na planilha (Ex: 21) antes de processar.",
+      });
+      return;
+    }
+
+    // Trava de segurança: Família é o único campo obrigatório de mapear
+    if (!colunaFamilia || colunaFamilia === "NONE") {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Coluna da Família Obrigatória",
+        mensagem: "Por favor, selecione qual coluna da planilha contém o Nome da Família.",
+      });
+      return;
+    }
+
+    if (!colunaRegistro) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Coluna do Registro Obrigatória",
+        mensagem: "Selecione a coluna do Nº do Registro Inmetro ou escolha 'Nenhuma'.",
+      });
+      return;
+    }
+
+    if (!colunaEmissao) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Coluna de Emissão Obrigatória",
+        mensagem: "Selecione a coluna da Data de Emissão ou escolha 'Nenhuma'.",
+      });
+      return;
+    }
+
+    if (colunaEmissao === "NONE" && !fallbackEmissao) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Data de Emissão Obrigatória",
+        mensagem: "Como você selecionou 'Nenhuma' para Emissão, preencha a Data de Emissão no campo manual acima.",
+      });
+      return;
+    }
+
+    if (!colunaValidade) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Coluna de Validade Obrigatória",
+        mensagem: "Selecione a coluna da Data de Validade ou escolha 'Nenhuma'.",
+      });
+      return;
+    }
+
+    if (colunaValidade === "NONE" && !fallbackValidade) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Data de Validade Obrigatória",
+        mensagem: "Como você selecionou 'Nenhuma' para Validade, preencha a Data de Validade no campo manual acima.",
+      });
+      return;
+    }
+
+    if (!colunaCodigoOcp) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Coluna Nº da Família Obrigatória",
+        mensagem: "Selecione a coluna do Nº da Família Inmetro ou escolha 'Nenhuma'.",
+      });
+      return;
+    }
+
     setImportandoExcel(true);
 
     try {
@@ -316,17 +410,17 @@ export default function CertificadosPage() {
       // 1. Busca todos os certificados já existentes no banco para esse importador
       const { data: certsExistentes, error: buscaError } = await supabase
         .from("inmetro_familias")
-        .select("numero_registro, nome_familia")
+        .select("numero_registro, nome_familia, codigo_ocp")
         .eq("empresa_id", excelEmpresaId);
 
       if (buscaError) {
         throw new Error("Erro ao consultar certificados existentes: " + buscaError.message);
       }
 
-      // Conjunto único combinando: FAMÍLIA + REGISTRO
+      // Conjunto único combinando: NÚMERO DA FAMÍLIA (Coluna C) + NOME (Coluna D) + REGISTRO
       const chavesExistentes = new Set(
         (certsExistentes || []).map((c) =>
-          `${(c.nome_familia || "").trim().toUpperCase()}:::${(c.numero_registro || "").trim().toUpperCase()}`
+          `${(c.codigo_ocp || "").trim().toUpperCase()}:::${(c.nome_familia || "").trim().toUpperCase()}:::${(c.numero_registro || "").trim().toUpperCase()}`
         )
       );
 
@@ -337,28 +431,90 @@ export default function CertificadosPage() {
       let totalIgnorados = 0;
       let comecouDados = false;
 
-      worksheet.eachRow((row) => {
-        const rawFamilia = row.getCell(colunaFamilia).text?.trim();
-        const rawRegistro = row.getCell(colunaRegistro).text?.trim();
-
-        // Detecta cabeçalho
-        if (!comecouDados) {
-          const termosCabecalho = ["FAMÍLIA", "FAMILIA", "REGISTRO", "EMISSÃO", "EMISSAO", "VALIDADE", "CERTIFICADO"];
-          const ehCabecalho = rawFamilia && termosCabecalho.some((t) => rawFamilia.toUpperCase().includes(t));
-          if (ehCabecalho) {
-            comecouDados = true;
+      // Helper à prova de balas: extrai texto de qualquer tipo de célula (fórmula, rich text ou nula)
+      const extrairTextoSeguro = (celula: ExcelJS.Cell | null | undefined): string => {
+        if (!celula) return "";
+        try {
+          const val = celula.value;
+          if (val === null || val === undefined) return "";
+          if (typeof val === "object") {
+            // Se for fórmula do Excel
+            if ("result" in val) {
+              return val.result !== null && val.result !== undefined ? String(val.result).trim() : "";
+            }
+            // Se for texto rico formatado
+            if (Array.isArray((val as any).richText)) {
+              return (val as any).richText.map((t: any) => t.text || "").join("").trim();
+            }
+            // Se tiver propriedade text
+            if ("text" in val) {
+              return String((val as any).text || "").trim();
+            }
           }
+          return String(val).trim();
+        } catch {
+          return "";
+        }
+      };
+
+      const numLinhaCorte = linhaInicio.trim() ? parseInt(linhaInicio.trim(), 10) : null;
+
+      worksheet.eachRow((row, rowNumber) => {
+        // REGRA DE OURO: Se o usuário definiu a linha inicial (ex: 21), ignora TUDO antes dela!
+        if (numLinhaCorte !== null && !isNaN(numLinhaCorte)) {
+          if (rowNumber < numLinhaCorte) return;
+        }
+
+        // Leitura 100% segura sem usar .text perigoso
+        const rawFamilia = colunaFamilia && colunaFamilia !== "NONE" 
+          ? extrairTextoSeguro(row.getCell(colunaFamilia))
+          : "";
+
+        // Pula linhas em branco
+        if (!rawFamilia) return;
+
+        // CINTO DE SEGURANÇA: Lista negra caso algum título passe ou ela esqueça de preencher a linha
+        const cabecalhosExatos = [
+          "FAMÍLIA", "FAMILIA", 
+          "NOME DA FAMÍLIA", "NOME DA FAMILIA", 
+          "Nº FAMÍLIA", "Nº FAMILIA", "NUMERO DA FAMILIA",
+          "REGISTRO", "Nº DO REGISTRO", "NUMERO DO REGISTRO",
+          "STATUS", "VALIDADE", "EMISSÃO", "EMISSAO", 
+          "CERTIFICADO", "PREENCHIDO PELA BRICS", "MODELO DE BRINQUEDO"
+        ];
+
+        if (cabecalhosExatos.includes(rawFamilia.trim().toUpperCase())) {
+          comecouDados = true;
           return;
         }
 
-        // Pula linhas em branco
-        if (!rawFamilia && !rawRegistro) return;
+        // Se ela não digitou linha de início, usa a detecção automática
+        if (numLinhaCorte === null || isNaN(numLinhaCorte)) {
+          if (!comecouDados) return;
+        }
 
-        const nomeFamilia = rawFamilia || "Família sem nome";
-        const numeroRegistro = rawRegistro || "Sem Registro";
-        const chaveComposta = `${nomeFamilia.trim().toUpperCase()}:::${numeroRegistro.trim().toUpperCase()}`;
+        // Leitura do Código/Número da Família (Coluna C - Ex: 50, 53)
+        let rawCodigoOcp = null;
+        if (colunaCodigoOcp && colunaCodigoOcp !== "NONE") {
+          rawCodigoOcp = extrairTextoSeguro(row.getCell(colunaCodigoOcp)) || null;
+        }
 
-        // REGRA ANTI-DUPLICIDADE: Se já existe no banco ou repetiu na planilha, ignora
+        // Leitura do Registro (Lê da planilha; se vier em branco, puxa o fallback)
+        let rawRegistro = "";
+        if (colunaRegistro && colunaRegistro !== "NONE") {
+          rawRegistro = extrairTextoSeguro(row.getCell(colunaRegistro));
+        }
+        if (!rawRegistro) {
+          rawRegistro = fallbackRegistro.trim() || "Sem Registro";
+        }
+
+        const nomeFamilia = rawFamilia;
+        const numeroRegistro = rawRegistro;
+        
+        // CHAVE ÚNICA MATEMÁTICA: Número da Família (Coluna C) + Nome da Família (Coluna D) + Registro
+        const chaveComposta = `${(rawCodigoOcp || "").trim().toUpperCase()}:::${nomeFamilia.trim().toUpperCase()}:::${numeroRegistro.trim().toUpperCase()}`;
+
+        // REGRA ANTI-DUPLICIDADE: Se já existe no banco ou repetiu na planilha, ignora com segurança
         const ehDuplicado = chavesExistentes.has(chaveComposta) || processadosNestaPlanilha.has(chaveComposta);
 
         if (ehDuplicado) {
@@ -369,11 +525,22 @@ export default function CertificadosPage() {
         // Marca como processado nesta rodada
         processadosNestaPlanilha.add(chaveComposta);
 
-        // Leitura e formatação segura das datas
-        const valEmissao = row.getCell(colunaEmissao).value;
-        const valValidade = row.getCell(colunaValidade).value;
-        const celulaOcp = row.getCell(colunaCodigoOcp);
-        const rawCodigoOcp = (celulaOcp.text || (celulaOcp.value !== null && celulaOcp.value !== undefined ? String(celulaOcp.value) : "")).trim();
+        // Leitura de Datas (Lê da planilha; se vier em branco, puxa o fallback)
+        let valEmissao = null;
+        if (colunaEmissao && colunaEmissao !== "NONE") {
+          valEmissao = row.getCell(colunaEmissao).value;
+        }
+        if (!valEmissao) {
+          valEmissao = fallbackEmissao;
+        }
+
+        let valValidade = null;
+        if (colunaValidade && colunaValidade !== "NONE") {
+          valValidade = row.getCell(colunaValidade).value;
+        }
+        if (!valValidade) {
+          valValidade = fallbackValidade;
+        }
 
         const dataEmissaoIso = converterDataExcelParaIso(valEmissao) || new Date().toISOString().split("T")[0];
         const dataValidadeIso = converterDataExcelParaIso(valValidade) || new Date().toISOString().split("T")[0];
@@ -390,7 +557,7 @@ export default function CertificadosPage() {
           status: statusFinal,
           ocp_nome: "brics",
           ocp_numero: "0098",
-          codigo_ocp: rawCodigoOcp || null,
+          codigo_ocp: rawCodigoOcp,
         });
       });
 
@@ -402,7 +569,7 @@ export default function CertificadosPage() {
           tipo: "alerta",
           titulo: "Nenhum Novo Certificado",
           mensagem: totalIgnorados > 0
-            ? `Todos os ${totalIgnorados} certificados desta planilha já estavam cadastrados no sistema e foram ignorados.`
+            ? `Todos os ${totalIgnorados} certificado(s) desta planilha já estavam cadastrados no sistema ou repetidos na planilha e foram ignorados com segurança.`
             : "Nenhum certificado válido foi localizado na planilha.",
         });
         return;
@@ -427,7 +594,7 @@ export default function CertificadosPage() {
         isOpen: true,
         tipo: "sucesso",
         titulo: "Importação Concluída com Sucesso!",
-        mensagem: `• ${novosParaInserir.length} novo(s) certificado(s) cadastrado(s).\n• ${totalIgnorados} certificado(s) já existiam no banco e foram ignorados com segurança.`,
+        mensagem: `• ${novosParaInserir.length} novo(s) certificado(s) cadastrado(s).\n• ${totalIgnorados} certificado(s) já existiam no banco ou estavam repetidos na planilha e foram ignorados com segurança.`,
       });
     } catch (err: any) {
       console.error("Erro na importação:", err);
@@ -634,19 +801,19 @@ export default function CertificadosPage() {
           </div>
 
           {/* 3. Filtro por Família */}
-          <div>
+          <div className="min-w-0">
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Família de Produtos
             </label>
             <select
               value={filtroFamilia}
               onChange={(e) => setFiltroFamilia(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition"
+              className="w-full max-w-full truncate px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition"
             >
               <option value="">Todas as Famílias</option>
               {familiasDisponiveis.map((fam, idx) => (
-                <option key={idx} value={fam}>
-                  {fam}
+                <option key={idx} value={fam} title={fam}>
+                  {fam.length > 60 ? `${fam.slice(0, 60)}...` : fam}
                 </option>
               ))}
             </select>
@@ -902,13 +1069,13 @@ export default function CertificadosPage() {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-900 mb-1">
-                      Código / Certificado da OCP (Opcional)
+                      Nº da Família
                     </label>
                     <input
                       type="text"
                       value={formData.codigo_ocp || ""}
                       onChange={(e) => setFormData({ ...formData, codigo_ocp: e.target.value })}
-                      placeholder="Ex: 13773/2026-BRI-1"
+                      placeholder="Ex: 75"
                       className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 outline-none font-mono font-semibold"
                     />
                   </div>
@@ -951,7 +1118,7 @@ export default function CertificadosPage() {
                 </div>
                 <div>
                   <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Importar Certificados via Excel</h3>
-                  <p className="text-xs text-slate-500">Cadastre múltiplos certificados de uma vez a partir da primeira aba.</p>
+                  <p className="text-xs text-slate-500">Cadastre múltiplos certificados de uma vez.</p>
                 </div>
               </div>
               <button
@@ -986,12 +1153,12 @@ export default function CertificadosPage() {
                 <p className="text-[11px] text-slate-400 mt-1">Apenas importadores previamente cadastrados no sistema.</p>
               </div>
 
-              {/* 2. Upload do Arquivo */}
+              {/* 2. Upload do Arquivo (Suporte completo a .xlsm e .xlsx) */}
               <div className="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center hover:border-emerald-500 transition-colors bg-slate-50/50">
                 <input
                   type="file"
                   id="excel-cert-upload"
-                  accept=".xlsx, .xls"
+                  accept=".xlsx, .xlsm, .xls"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) setExcelFile(f);
@@ -1006,22 +1173,83 @@ export default function CertificadosPage() {
                   </div>
                   <div>
                     <p className="text-xs font-bold text-slate-800">
-                      {excelFile ? excelFile.name : "Clique para selecionar a planilha de certificados"}
+                      {excelFile ? excelFile.name : "Clique e Adicione seu Excel"}
                     </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">O sistema lerá os dados da primeira aba da planilha</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">O sistema lerá automaticamente os dados da primeira aba</p>
                   </div>
                 </label>
               </div>
 
-              {/* 3. Seleção de Colunas */}
-              <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80 space-y-2.5">
-                <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block">
-                  Mapeamento de Colunas da Planilha
+              {/* 3. Preenchimento Rápido / Fallback (Para Memoriais sem colunas de datas/registro) */}
+              <div className="bg-amber-50/50 p-3 rounded-xl border border-amber-200/70 space-y-2">
+                <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block">
+                  SE NÃO HOUVER COLUNAS, PREENCHA MANUALMENTE
                 </span>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    <label className="block text-[10px] font-bold text-slate-700 mb-0.5">Nº do Registro Inmetro</label>
+                    <input
+                      type="text"
+                      value={fallbackRegistro}
+                      onChange={(e) => setFallbackRegistro(e.target.value)}
+                      placeholder="Ex: 002158/2024"
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 mb-0.5">Data de Emissão</label>
+                    <input
+                      type="date"
+                      value={fallbackEmissao}
+                      onChange={(e) => setFallbackEmissao(e.target.value)}
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 mb-0.5">Data de Validade</label>
+                    <input
+                      type="date"
+                      value={fallbackValidade}
+                      onChange={(e) => setFallbackValidade(e.target.value)}
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Seleção e Mapeamento de Colunas Flexível */}
+              <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-2.5">
+                  <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block">
+                    Coordenadas da Planilha
+                  </span>
+                  
+                  {/* Campo Cirúrgico da Linha Inicial */}
+                  <div
+                    className={`flex items-center gap-2 px-2.5 py-1 rounded-xl border transition-colors ${
+                      !linhaInicio.trim()
+                        ? "bg-blue-50/90 border-blue-300 shadow-2xs"
+                        : "bg-emerald-50/60 border-emerald-200"
+                    }`}
+                  >
+                    <label className="text-[11px] font-extrabold text-blue-900 uppercase tracking-wider whitespace-nowrap">
+                      Iniciar na Linha
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={linhaInicio}
+                      onChange={(e) => setLinhaInicio(e.target.value)}
+                      placeholder="..."
+                      className="w-24 px-2 py-1 border border-blue-300 rounded-lg text-xs bg-white text-slate-900 font-mono font-extrabold text-center outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-1">
+                  {/* Família (Obrigatório) */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
                       Nome da Família *
                     </label>
                     <select
@@ -1029,44 +1257,34 @@ export default function CertificadosPage() {
                       onChange={(e) => setColunaFamilia(e.target.value)}
                       className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
                     >
-                      {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((col) => (
+                      <option value="">-- Selecione a Coluna --</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
                         <option key={col} value={col}>Coluna {col}</option>
                       ))}
                     </select>
                   </div>
 
+                  {/* Registro Inmetro */}
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                      Nº do Registro Inmetro *
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Nº do Registro Inmetro
                     </label>
                     <select
                       value={colunaRegistro}
                       onChange={(e) => setColunaRegistro(e.target.value)}
                       className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
                     >
-                      {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((col) => (
+                      <option value="">-- Selecione a Coluna --</option>
+                      <option value="NONE">Nenhuma (Usar dado geral acima)</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
                         <option key={col} value={col}>Coluna {col}</option>
                       ))}
                     </select>
                   </div>
 
+                  {/* Emissão */}
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                      Data de Validade *
-                    </label>
-                    <select
-                      value={colunaValidade}
-                      onChange={(e) => setColunaValidade(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
-                    >
-                      {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((col) => (
-                        <option key={col} value={col}>Coluna {col}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
                       Data de Emissão
                     </label>
                     <select
@@ -1074,22 +1292,45 @@ export default function CertificadosPage() {
                       onChange={(e) => setColunaEmissao(e.target.value)}
                       className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
                     >
-                      {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((col) => (
+                      <option value="">-- Selecione a Coluna --</option>
+                      <option value="NONE">Nenhuma (Usar data geral acima)</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
                         <option key={col} value={col}>Coluna {col}</option>
                       ))}
                     </select>
                   </div>
 
+                  {/* Validade */}
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                      Cód. Certificado / OCP 
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Data de Validade
+                    </label>
+                    <select
+                      value={colunaValidade}
+                      onChange={(e) => setColunaValidade(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      <option value="">-- Selecione a Coluna --</option>
+                      <option value="NONE">Nenhuma (Usar data geral acima)</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Rótulo Corrigido Definitivo */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Nº da Família Inmetro
                     </label>
                     <select
                       value={colunaCodigoOcp}
                       onChange={(e) => setColunaCodigoOcp(e.target.value)}
                       className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
                     >
-                      {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((col) => (
+                      <option value="">-- Selecione a Coluna --</option>
+                      <option value="NONE">Nenhuma (Não possui na planilha)</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
                         <option key={col} value={col}>Coluna {col}</option>
                       ))}
                     </select>

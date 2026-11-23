@@ -9,8 +9,8 @@ export default async function Home() {
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
 
-  // CONSULTAS EM PARALELO AO SUPABASE (Busca única otimizada sem gargalo de rede)
-  const [empresaResult, certificadoResult, produtoResult] = await Promise.all([
+  // CONSULTAS EM PARALELO AO SUPABASE (Empresas e Certificados)
+  const [empresaResult, certificadoResult] = await Promise.all([
     supabase
       .from("empresas")
       .select("id, razao_social, cnpj, logo_url")
@@ -20,19 +20,30 @@ export default async function Home() {
       .from("inmetro_familias")
       .select("id, empresa_id, nome_familia, numero_registro, data_validade, status, empresas(razao_social)")
       .order("data_validade", { ascending: true }),
+  ]);
 
-    supabase
+  // Busca paginada de TODOS os produtos (rompe o limite padrão de 1.000 linhas do Supabase)
+  const listaProdutos: { id: string; empresa_id: string; familia_id: string | null; referencia_interna: string | null }[] = [];
+  let pagina = 0;
+  const tamanhoPagina = 1000;
+  while (true) {
+    const { data: loteProd } = await supabase
       .from("produtos")
       .select("id, empresa_id, familia_id, referencia_interna")
-  ]);
+      .order("id", { ascending: true })
+      .range(pagina * tamanhoPagina, (pagina + 1) * tamanhoPagina - 1);
+
+    if (!loteProd || loteProd.length === 0) break;
+    listaProdutos.push(...loteProd);
+    if (loteProd.length < tamanhoPagina) break;
+    pagina++;
+  }
 
   const { data: empresas } = empresaResult;
   const { data: certificados } = certificadoResult;
-  const { data: produtos } = produtoResult;
 
   // --- CÁLCULOS DE COMPLIANCE E INTELIGÊNCIA EM MEMÓRIA ---
   const listaCertificados: any[] = certificados || [];
-  const listaProdutos = produtos || [];
   const listaEmpresas = empresas || [];
 
   // Identifica certificados vencidos ou vencendo nos próximos 30 dias
@@ -50,7 +61,9 @@ export default async function Home() {
 
   // Mapeamento operacional por importador
   const resumoEmpresas = listaEmpresas.map((emp) => {
-    const totalProd = listaProdutos.filter((p) => p.empresa_id === emp.id).length;
+    const prodsEmpresa = listaProdutos.filter((p) => p.empresa_id === emp.id);
+    const totalProd = prodsEmpresa.length;
+    const semCertificado = prodsEmpresa.filter((p) => !p.familia_id).length;
     const certsEmpresa = listaCertificados.filter((c) => c.empresa_id === emp.id);
     const temRisco = certsEmpresa.some((cert) => {
       if (cert.status === "Sem Registro" || cert.status === "Vencido") return true;
@@ -63,6 +76,7 @@ export default async function Home() {
     return {
       ...emp,
       totalProdutos: totalProd,
+      semCertificado,
       totalCertificados: certsEmpresa.length,
       temRisco,
     };
@@ -184,12 +198,15 @@ export default async function Home() {
           </div>
         </div>
 
-        {/* Card 4: Pendências no Catálogo */}
-        <div className={`p-6 rounded-2xl border transition-all duration-200 flex items-center justify-between group ${
-          produtosPendentes.length > 0
-            ? "bg-amber-50/40 border-amber-200 shadow-[0_2px_12px_rgba(245,158,11,0.06)]"
-            : "bg-white border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)]"
-        }`}>
+        {/* Card 4: Pendências no Catálogo (Clicável) */}
+        <Link
+          href="/produtos"
+          className={`p-6 rounded-2xl border transition-all duration-200 flex items-center justify-between group hover:shadow-[0_4px_20px_rgba(0,0,0,0.07)] ${
+            produtosPendentes.length > 0
+              ? "bg-amber-50/40 border-amber-200 hover:border-amber-300 shadow-[0_2px_12px_rgba(245,158,11,0.06)]"
+              : "bg-white border-slate-200/80 hover:border-blue-300 shadow-[0_2px_12px_rgba(0,0,0,0.04)]"
+          }`}
+        >
           <div className="space-y-1">
             <p className={`text-xs font-bold uppercase tracking-wider ${produtosPendentes.length > 0 ? "text-amber-600" : "text-slate-400"}`}>
               Itens c/ Pendência
@@ -197,7 +214,9 @@ export default async function Home() {
             <h3 className={`text-3xl font-extrabold tracking-tight ${produtosPendentes.length > 0 ? "text-amber-700" : "text-slate-800"}`}>
               {produtosPendentes.length}
             </h3>
-            <p className="text-[11px] text-slate-400 font-medium">Sem Ref ou Sem Inmetro</p>
+            <p className="text-[11px] text-slate-400 font-medium group-hover:text-amber-700 transition-colors">
+              Sem Ref ou Sem Inmetro →
+            </p>
           </div>
           <div className={`p-3.5 rounded-xl border group-hover:scale-105 transition-transform duration-200 ${
             produtosPendentes.length > 0 ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-slate-50 text-slate-400 border-slate-100"
@@ -206,7 +225,7 @@ export default async function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* RADAR DE VALIDADE INMETRO (Certificados Críticos) */}
@@ -282,6 +301,16 @@ export default async function Home() {
                 })}
               </tbody>
             </table>
+            {certificadosEmRisco.length > 5 && (
+              <div className="px-6 py-3 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                <span>
+                  Mostrando os <strong>5</strong> mais urgentes de <strong>{certificadosEmRisco.length}</strong> certificados em risco.
+                </span>
+                <Link href="/certificados" className="font-semibold text-blue-600 hover:text-blue-800 transition">
+                  Ver todos os {certificadosEmRisco.length} →
+                </Link>
+              </div>
+            )}
           </div>
         ) : (
           <div className="p-8 text-center bg-emerald-50/30">
@@ -350,6 +379,10 @@ export default async function Home() {
                       {emp.temRisco ? (
                         <span className="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-2.5 py-1 rounded-full">
                           Atenção Inmetro
+                        </span>
+                      ) : emp.semCertificado > 0 ? (
+                        <span className="bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-full">
+                          {emp.semCertificado} sem certificado
                         </span>
                       ) : (
                         <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-2.5 py-1 rounded-full">

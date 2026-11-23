@@ -22,6 +22,7 @@ interface ProdutoDB {
   partes_pequenas: boolean;
   metal: boolean;
   restritivo_0_3_anos: boolean;
+  restritivo_0_4_anos?: boolean;
   idade_minima: string | null;
   empresas: {
     razao_social: string;
@@ -45,6 +46,7 @@ interface ItemNaoCadastrado {
   linha: number;
   fty_no: string;
   descricao: string;
+  ean_13?: string;
 }
 
 interface EmpresaOption {
@@ -61,13 +63,20 @@ interface FamiliaOption {
 export default function LiquidificadorPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
-  const [colunaFty, setColunaFty] = useState<string>("A"); // Padrão da planilha da China
-  const [colunaDescricao, setColunaDescricao] = useState<string>("D"); // Coluna com o nome do produto
-  const [colunaEtiqueta, setColunaEtiqueta] = useState<string>("C"); // Padrão da etiqueta
+  const [colunaFty, setColunaFty] = useState<string>(""); // Selecionável pelo operador
+  const [colunaDescricao, setColunaDescricao] = useState<string>(""); // Opcional (ajuda no desempate de Ref repetida)
+  const [colunaEan, setColunaEan] = useState<string>(""); // Opcional (desempate preciso por código de barras)
+  const [colunaEtiqueta, setColunaEtiqueta] = useState<string>(""); // Coluna que receberá as imagens
+  const [linhaInicio, setLinhaInicio] = useState<string>(""); // Linha inicial onde começam os dados reais
   const [loading, setLoading] = useState(false);
 
   // Controle das Abas de Modalidade da Carga
   const [modoEtiqueta, setModoEtiqueta] = useState<"padrao" | "concessao">("padrao");
+  // Gera lista completa de colunas de A até AZ (52 colunas)
+  const OPCOES_COLUNAS_EXCEL = [
+    ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""),
+    ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((c) => "A" + c),
+  ];
   const [termoConcessao, setTermoConcessao] = useState<string>("007/2026");
   const [statusMsg, setStatusMsg] = useState<string>("");
   const [naoCadastrados, setNaoCadastrados] = useState<ItemNaoCadastrado[]>([]);
@@ -153,7 +162,7 @@ export default function LiquidificadorPage() {
         familia_id: null,
         fty_no: item.fty_no,
         descricao: item.descricao,
-        ean_13: gerarEanAutomatico(),
+        ean_13: item.ean_13 && /^\d{13}$/.test(item.ean_13) ? item.ean_13 : gerarEanAutomatico(),
         data_fabricacao: `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`,
         lote: `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`,
         usa_pilha: false,
@@ -161,6 +170,7 @@ export default function LiquidificadorPage() {
         partes_pequenas: true,
         metal: false,
         restritivo_0_3_anos: true,
+        restritivo_0_4_anos: false,
         idade_minima: "3 ANOS",
       }));
 
@@ -197,7 +207,7 @@ export default function LiquidificadorPage() {
 
   // Helper para gerar apresentação em PDF formato Slide PowerPoint (16:9)
   async function baixarApresentacaoPdf(
-    etiquetas: { fty_no: string; buffer: ArrayBuffer }[],
+    etiquetas: { prodId: string; fty_no: string; buffer: ArrayBuffer }[],
     nomeArquivoOriginal: string
   ) {
     try {
@@ -214,9 +224,18 @@ export default function LiquidificadorPage() {
       const xPos = (slideWidth - labelWidth) / 2;
       const yPos = (slideHeight - labelHeight) / 2;
 
-      for (const item of etiquetas) {
+      // Cache pelo ID único do produto (evita repetir arte errada quando há mesma Ref)
+      const cachePng = new Map<string, any>();
+
+      for (let i = 0; i < etiquetas.length; i++) {
+        const item = etiquetas[i];
         const page = pdfDoc.addPage([slideWidth, slideHeight]);
-        const imgPng = await pdfDoc.embedPng(item.buffer);
+
+        let imgPng = cachePng.get(item.prodId);
+        if (!imgPng) {
+          imgPng = await pdfDoc.embedPng(item.buffer);
+          cachePng.set(item.prodId, imgPng);
+        }
 
         page.drawImage(imgPng, {
           x: xPos,
@@ -224,6 +243,9 @@ export default function LiquidificadorPage() {
           width: labelWidth,
           height: labelHeight,
         });
+
+        // Libera a thread do navegador a cada página para não travar a aba do Chrome
+        await new Promise((resolve) => setTimeout(resolve, 0));
       }
 
       const pdfBytes = await pdfDoc.save();
@@ -372,13 +394,16 @@ export default function LiquidificadorPage() {
       });
 
       const idadeFormatada = (prod.idade_minima || "3 ANOS").replace(/^\+/, "").trim().toUpperCase();
+      const textoIdade = /^(\+?0+|0+\+?|\+?0\s*ANO|TODAS AS IDADES)/i.test((prod.idade_minima || "").trim())
+        ? "INDICADO PARA TODAS AS IDADES"
+        : `INDICADO PARA CRIANÇAS MAIORES DE ${idadeFormatada}.`;
       ctx.font = `900 ${fontSize + 2}px Arial, Helvetica, sans-serif`;
-      ctx.fillText(`INDICADO PARA CRIANÇAS MAIORES DE ${idadeFormatada}.`, 520, yPos + 6);
+      ctx.fillText(textoIdade, 520, yPos + 6);
       ctx.font = `bold ${fontSize - 1}px Arial, Helvetica, sans-serif`;
       ctx.fillText("GUARDAR PARA EVENTUAIS CONSULTAS", 520, yPos + lineH + 6);
 
-      // --- SELO 0-3 ANOS (Geometria SVG Oficial com carinha triste, posicionado no 66% e à direita) ---
-      if (prod.restritivo_0_3_anos) {
+      // --- SELO 0-3 / 0-4 ANOS (Geometria SVG Oficial com carinha triste, posicionado no 66% e à direita) ---
+      if (prod.restritivo_0_3_anos || prod.restritivo_0_4_anos) {
         const cx = 1080;
         const cy = 385; // 66% do bloco central
         const r = 70;
@@ -401,11 +426,15 @@ export default function LiquidificadorPage() {
         ctx.lineCap = "round";
         ctx.stroke();
 
-        // Texto "0-3"
+        // Texto "0-3" ou "0-4"
         ctx.fillStyle = "#000000";
         ctx.font = "bold 34px Arial, Helvetica, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("0-3", cx - 24, cy + 28);
+        ctx.fillText(
+          prod.restritivo_0_4_anos && !prod.restritivo_0_3_anos ? "0-4" : "0-3",
+          cx - 24,
+          cy + 28
+        );
 
         // Rostinho do bebê
         const bx = cx + 30;
@@ -445,24 +474,61 @@ export default function LiquidificadorPage() {
       }
 
       // --- 3. RODAPÉ EM 3 COLUNAS ALINHADAS ---
-      const footerY = 530;
+      const quebrarLinhasFooter = (texto: string, maxWidth: number): string[] => {
+        if (ctx.measureText(texto).width <= maxWidth) return [texto];
+        const palavras = texto.split(" ");
+        const linhas: string[] = [];
+        let atual = "";
+        palavras.forEach((p) => {
+          const teste = atual ? `${atual} ${p}` : p;
+          if (ctx.measureText(teste).width <= maxWidth) {
+            atual = teste;
+          } else {
+            if (atual) linhas.push(atual);
+            atual = p;
+          }
+        });
+        if (atual) linhas.push(atual);
+        return linhas;
+      };
 
-      // COLUNA 1: DADOS JURÍDICOS (Esquerda, máx 490px)
       ctx.textAlign = "left";
       ctx.fillStyle = "#000000";
+
       ctx.font = "900 19px Arial, Helvetica, sans-serif";
-      ctx.fillText(prod.descricao.toUpperCase(), 35, footerY);
+      const linhasDesc = quebrarLinhasFooter(prod.descricao.toUpperCase(), 485);
 
       ctx.font = "bold 15px Arial, Helvetica, sans-serif";
-      let dy = footerY + 24;
-      ctx.fillText(`Ref: ${prod.referencia_interna || prod.fty_no}   Item: ${prod.fty_no}`, 35, dy);
-      dy += 22;
-      ctx.fillText(`Código de barras: ${prod.ean_13 || "N/A"}`, 35, dy);
-      dy += 22;
-      ctx.fillText(`Importador: ${prod.empresas?.razao_social || "IMPORTADORA"}`, 35, dy);
-      dy += 22;
+      const impTexto = `Importador: ${prod.empresas?.razao_social || "IMPORTADORA"}`;
+      const linhasImp = quebrarLinhasFooter(impTexto, 490);
 
-      // Endereço (com quebra inteligente se passar de 480px)
+      // Mantém 100% idêntico quando cabe em 1 linha; só compacta se quebrar linha para nunca cortar abaixo de 800px
+      const linhasExtrasFooter = (linhasDesc.length - 1) + (linhasImp.length - 1);
+      const footerY = linhasExtrasFooter >= 2 ? 515 : linhasExtrasFooter === 1 ? 522 : 530;
+      const passoTitulo = linhasExtrasFooter >= 2 ? 21 : 22;
+      const passoMedio = linhasExtrasFooter >= 2 ? 18 : linhasExtrasFooter === 1 ? 20 : 22;
+      const passoFim = linhasExtrasFooter >= 2 ? 18 : linhasExtrasFooter === 1 ? 19 : 20;
+
+      // COLUNA 1: DADOS JURÍDICOS (Esquerda, máx 490px para nunca encostar no código de barras)
+      ctx.font = "900 19px Arial, Helvetica, sans-serif";
+      let dy = footerY;
+      linhasDesc.forEach((linha, idx) => {
+        ctx.fillText(linha, 35, dy);
+        dy += idx < linhasDesc.length - 1 ? passoTitulo : (linhasExtrasFooter >= 2 ? 21 : 24);
+      });
+
+      ctx.font = "bold 15px Arial, Helvetica, sans-serif";
+      ctx.fillText(`Ref: ${prod.referencia_interna || prod.fty_no}   Item: ${prod.fty_no}`, 35, dy);
+      dy += passoMedio;
+      ctx.fillText(`Código de barras: ${prod.ean_13 || "N/A"}`, 35, dy);
+      dy += passoMedio;
+
+      linhasImp.forEach((linha, idx) => {
+        ctx.fillText(linha, 35, dy);
+        dy += idx < linhasImp.length - 1 ? 17 : passoMedio;
+      });
+
+      // Endereço (com quebra inteligente se passar de 410px)
       ctx.font = "14px Arial, Helvetica, sans-serif";
       const endTexto = `Endereço: ${prod.empresas?.endereco || "Não informado"}`;
       if (ctx.measureText(endTexto).width > 410) {
@@ -473,29 +539,29 @@ export default function LiquidificadorPage() {
           else l2 += p + " ";
         });
         ctx.fillText(l1, 35, dy);
-        dy += 19;
+        dy += linhasExtrasFooter >= 2 ? 17 : 19;
         ctx.fillText(l2, 35, dy);
       } else {
         ctx.fillText(endTexto, 35, dy);
       }
-      dy += 22;
+      dy += passoMedio;
 
       ctx.font = "bold 14px Arial, Helvetica, sans-serif";
       const fabStr = prod.data_fabricacao || `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`;
       const loteStr = prod.lote || `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`;
       ctx.fillText(`Fabricação: ${fabStr}`, 35, dy);
-      dy += 20;
+      dy += passoFim;
       ctx.fillText(`Lote: ${loteStr}`, 35, dy);
-      dy += 20;
+      dy += passoFim;
       ctx.fillText(`CNPJ: ${prod.empresas?.cnpj || ""}`, 35, dy);
-      dy += 20;
+      dy += passoFim;
       ctx.fillText("Origem: China", 35, dy);
-      dy += 20;
+      dy += passoFim;
       ctx.fillText(`SAC: ${prod.empresas?.sac_email || ""}`, 35, dy);
 
       // Linha legal do Termo de Concessão (Exclusiva do Modo Concessão)
       if (modoEtiqueta === "concessao") {
-        dy += 20;
+        dy += passoFim;
         ctx.font = "900 13px Arial, Helvetica, sans-serif";
         ctx.fillText(`CERTIFICADO POR E CONCESSÃO CEDIDA TERMO ${termoConcessao || "007/2026"}`, 35, dy);
       }
@@ -566,9 +632,7 @@ export default function LiquidificadorPage() {
         });
 
         ctx.font = "bold 12.5px Arial, Helvetica, sans-serif";
-        const textoOcp = prod.inmetro_familias.codigo_ocp 
-          ? prod.inmetro_familias.codigo_ocp 
-          : `OCP ${prod.inmetro_familias.ocp_numero || "0098"}`;
+        const textoOcp = `OCP ${prod.inmetro_familias.ocp_numero || "0098"}`;
         ctx.fillText(textoOcp, bricsX, iy + 142);
 
         // Sub-bloco INMETRO (Altura máxima oficial e palavra 100% contida na barra)
@@ -627,13 +691,34 @@ export default function LiquidificadorPage() {
   async function processarPlanilha(ignorarAvisoRef = false) {
     if (!file) return;
 
-    // Trava de Segurança: Obriga a escolher o Importador da carga
+    // Trava de Segurança: Obriga a escolher o Importador e as colunas obrigatórias
     if (!empresaSelecionada) {
       setModalAviso({
         isOpen: true,
         tipo: "alerta",
         titulo: "Importador Obrigatório",
         mensagem: "Por favor, selecione qual Importador é dono desta carga antes de processar a planilha.",
+      });
+      return;
+    }
+
+    const linhaNum = parseInt(linhaInicio.trim(), 10);
+    if (!linhaInicio.trim() || isNaN(linhaNum) || linhaNum < 1) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Linha Inicial Obrigatória",
+        mensagem: "Informe o número da linha onde começam os produtos na planilha (Ex: 21) antes de gerar.",
+      });
+      return;
+    }
+
+    if (!colunaFty || !colunaEtiqueta) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Colunas Obrigatórias",
+        mensagem: "Selecione a Coluna do Código (FTY) e a Coluna da Etiqueta antes de gerar a planilha.",
       });
       return;
     }
@@ -661,19 +746,51 @@ export default function LiquidificadorPage() {
 
       // 1. Coleta inteligente: Ignora cabeçalhos chineses e lê apenas os produtos reais
       setStatusMsg("Fazendo o Raio-X e cruzando itens com o banco...");
-      const itensPlanilha: { linha: number; fty_no: string; descricao: string }[] = [];
+      const itensPlanilha: { linha: number; fty_no: string; descricao: string; ean_13: string }[] = [];
       let comecouProdutos = false;
 
-      worksheet.eachRow((row, rowNumber) => {
-        const cellFty = row.getCell(colunaFty).text?.trim();
-
-        // Captura a descrição diretamente da coluna escolhida pelo usuário
-        let cellDesc = row.getCell(colunaDescricao).text?.trim() || cellFty || "PRODUTO IMPORTADO";
-
-        // Se por acaso a descrição capturada for puramente numérica (ex: quantidade de caixa 220), usa o código do produto
-        if (cellDesc && /^\d+$/.test(cellDesc) && cellFty) {
-          cellDesc = cellFty;
+      // Helper à prova de balas contra fórmulas nulas do Excel
+      const extrairTextoSeguro = (celula: ExcelJS.Cell | null | undefined): string => {
+        if (!celula) return "";
+        try {
+          const val = celula.value;
+          if (val === null || val === undefined) return "";
+          if (typeof val === "object") {
+            if ("result" in val) return val.result !== null && val.result !== undefined ? String(val.result).trim() : "";
+            if (Array.isArray((val as any).richText)) return (val as any).richText.map((t: any) => t.text || "").join("").trim();
+            if ("text" in val) return String((val as any).text || "").trim();
+          }
+          return String(val).trim();
+        } catch {
+          return "";
         }
+      };
+
+      const numLinhaCorte = linhaInicio.trim() ? parseInt(linhaInicio.trim(), 10) : null;
+
+      worksheet.eachRow((row, rowNumber) => {
+        // Se você digitou a linha de início (ex: 21), ignora 100% de tudo antes dela
+        if (numLinhaCorte !== null && !isNaN(numLinhaCorte)) {
+          if (rowNumber < numLinhaCorte) return;
+        }
+
+        const cellFty = extrairTextoSeguro(row.getCell(colunaFty));
+
+        // Captura a descrição opcional (usada para desempate de Ref repetida ou cadastro novo)
+        let cellDesc = (colunaDescricao && colunaDescricao !== "NONE")
+          ? extrairTextoSeguro(row.getCell(colunaDescricao))
+          : "";
+
+        // Se por acaso a descrição capturada for puramente numérica (ex: quantidade de caixa 220), descarta
+        if (cellDesc && /^\d+$/.test(cellDesc)) {
+          cellDesc = "";
+        }
+
+        // Captura o EAN opcional (só aceita 13 dígitos numéricos; texto inválido como "Código de barras" vira vazio para gerar 789 automático)
+        const rawCellEan = (colunaEan && colunaEan !== "NONE")
+          ? extrairTextoSeguro(row.getCell(colunaEan)).replace(/["'\s-]/g, "").trim()
+          : "";
+        const cellEan = /^\d{13}$/.test(rawCellEan) ? rawCellEan : "";
 
         // Filtro anti-ruído: ignora linhas de endereço/contato corporativo da fábrica chinesa
         const termosDescarte = ["ADD:", "TEL:", "FAX:", "ROOM", "STREET", "ROAD", "BUILDING", "EMAIL:"];
@@ -682,14 +799,17 @@ export default function LiquidificadorPage() {
           termosDescarte.some((termo) => cellFty.toUpperCase().includes(termo))
         );
 
-        // Detecta a linha do cabeçalho oficial de forma flexível (FTY, ITEM, REF, ART, NO, ou termos chineses)
-        if (!comecouProdutos) {
-          const termosCabecalho = ["FTY", "ITEM", "REF", "ART", "NO.", "MODEL", "品名", "序号"];
-          const ehCabecalho = cellFty && !ehRuidoCorporativo && termosCabecalho.some((termo) => cellFty.toUpperCase().includes(termo));
-          if (ehCabecalho) {
-            comecouProdutos = true;
+        // Se você digitou a linha inicial (ex: 21), pula a detecção de cabeçalho e lê direto!
+        // Se deixou em branco, aí sim ele busca o cabeçalho automaticamente
+        if (numLinhaCorte === null || isNaN(numLinhaCorte)) {
+          if (!comecouProdutos) {
+            const termosCabecalho = ["FTY", "ITEM", "REF", "ART", "NO.", "MODEL", "品名", "序号"];
+            const ehCabecalho = cellFty && !ehRuidoCorporativo && termosCabecalho.some((termo) => cellFty.toUpperCase().includes(termo));
+            if (ehCabecalho) {
+              comecouProdutos = true;
+            }
+            return;
           }
-          return;
         }
 
         // Ignora linhas vazias, totalizadores (TOTAL / SUM / TT) ou rodapés de contato
@@ -704,6 +824,7 @@ export default function LiquidificadorPage() {
             linha: rowNumber,
             fty_no: cellFty,
             descricao: cellDesc,
+            ean_13: cellEan,
           });
         }
       });
@@ -719,37 +840,100 @@ export default function LiquidificadorPage() {
         return;
       }
 
-      // 2. Busca todos os produtos no banco que batem com esses códigos para este importador
-      const ftyList = itensPlanilha.map((i) => i.fty_no);
-      let queryProdutos = supabase
-        .from("produtos")
-        .select(`
-          *,
-          empresas(razao_social, cnpj, endereco, sac_email, logo_url),
-          inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero, codigo_ocp, status, data_validade)
-        `)
-        .in("fty_no", ftyList);
+      // 2. Busca todos os produtos deste importador no banco (paginado para nunca travar no limite de 1000)
+      const produtosBanco: any[] = [];
+      let pagina = 0;
+      const tamanhoPagina = 1000;
+      while (true) {
+        const { data: loteProd, error: prodError } = await supabase
+          .from("produtos")
+          .select(`
+            *,
+            empresas(razao_social, cnpj, endereco, sac_email, logo_url),
+            inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero, codigo_ocp, status, data_validade)
+          `)
+          .eq("empresa_id", empresaSelecionada)
+          .range(pagina * tamanhoPagina, (pagina + 1) * tamanhoPagina - 1);
 
-      if (empresaSelecionada) {
-        queryProdutos = queryProdutos.eq("empresa_id", empresaSelecionada);
+        if (prodError) {
+          throw new Error("Erro ao consultar catálogo no banco: " + prodError.message);
+        }
+        if (!loteProd || loteProd.length === 0) break;
+        produtosBanco.push(...loteProd);
+        if (loteProd.length < tamanhoPagina) break;
+        pagina++;
       }
 
-      const { data: produtosBanco, error: prodError } = await queryProdutos;
-
-      if (prodError) {
-        throw new Error("Erro ao consultar catálogo no banco: " + prodError.message);
-      }
-
-      const produtosMap = new Map<string, ProdutoDB>();
-      (produtosBanco || []).forEach((p: any) => {
-        produtosMap.set(p.fty_no.trim().toUpperCase(), p);
+      // Agrupa em lista por FTY NO para suportar múltiplos produtos com a mesma referência
+      const produtosPorFty = new Map<string, ProdutoDB[]>();
+      produtosBanco.forEach((p: any) => {
+        const chave = (p.fty_no || "").trim().toUpperCase();
+        if (!chave) return;
+        const lista = produtosPorFty.get(chave) || [];
+        lista.push(p);
+        produtosPorFty.set(chave, lista);
       });
 
-      // 3. Checagem de Risco Zero: Identifica itens não cadastrados
+      const limparEan = (val?: string | null) => (val || "").replace(/["'\s-]/g, "").trim().toUpperCase();
+      const normTexto = (val?: string | null) => (val || "").trim().toUpperCase().replace(/\s+/g, " ");
+
+      // Resolvedor inteligente: nunca mistura campos de produtos diferentes
+      const resolverProduto = (item: { linha: number; fty_no: string; descricao: string; ean_13: string }) => {
+        const candidatos = produtosPorFty.get(item.fty_no.trim().toUpperCase()) || [];
+        if (candidatos.length === 0) return { prod: null as ProdutoDB | null, ambiguo: false };
+        if (candidatos.length === 1) return { prod: candidatos[0], ambiguo: false };
+
+        // Há mais de 1 produto com o mesmo código FTY: desempata por EAN e/ou Descrição
+        let pool = candidatos;
+        if (item.ean_13) {
+          const eanNorm = limparEan(item.ean_13);
+          const porEan = pool.filter(
+            (c) => limparEan(c.ean_13) === eanNorm || limparEan(c.ean_barras) === eanNorm
+          );
+          if (porEan.length === 1) return { prod: porEan[0], ambiguo: false };
+          if (porEan.length > 1) pool = porEan;
+        }
+
+        if (item.descricao) {
+          const descNorm = normTexto(item.descricao);
+          const porDescExata = pool.filter((c) => normTexto(c.descricao) === descNorm);
+          if (porDescExata.length === 1) return { prod: porDescExata[0], ambiguo: false };
+
+          if (porDescExata.length === 0) {
+            const porDescParcial = pool.filter((c) => {
+              const cd = normTexto(c.descricao);
+              return cd && (cd.includes(descNorm) || descNorm.includes(cd));
+            });
+            if (porDescParcial.length === 1) return { prod: porDescParcial[0], ambiguo: false };
+          }
+        }
+
+        return { prod: null as ProdutoDB | null, ambiguo: true };
+      };
+
+      // 3. Checagem de Risco Zero: Identifica itens não cadastrados ou ambíguos
       const faltantes: ItemNaoCadastrado[] = [];
+      const faltantesChaves = new Set<string>();
+      const linhasAmbiguas: string[] = [];
+      const itensResolvidos: { linha: number; fty_no: string; prod: ProdutoDB }[] = [];
+
       itensPlanilha.forEach((item) => {
-        if (!produtosMap.has(item.fty_no.trim().toUpperCase())) {
-          faltantes.push(item);
+        const { prod, ambiguo } = resolverProduto(item);
+        if (ambiguo) {
+          linhasAmbiguas.push(`Linha ${item.linha} (${item.fty_no})`);
+        } else if (!prod) {
+          const chaveFaltante = `${item.fty_no.trim().toUpperCase()}:::${normTexto(item.descricao)}:::${limparEan(item.ean_13)}`;
+          if (!faltantesChaves.has(chaveFaltante)) {
+            faltantesChaves.add(chaveFaltante);
+            faltantes.push({
+              linha: item.linha,
+              fty_no: item.fty_no,
+              descricao: item.descricao || item.fty_no || "PRODUTO IMPORTADO",
+              ean_13: item.ean_13 || undefined,
+            });
+          }
+        } else {
+          itensResolvidos.push({ linha: item.linha, fty_no: item.fty_no, prod });
         }
       });
 
@@ -762,24 +946,35 @@ export default function LiquidificadorPage() {
         return;
       }
 
+      // Se houver referência repetida sem EAN/Descrição suficiente para desempatar, nunca chuta
+      if (linhasAmbiguas.length > 0) {
+        setModalAviso({
+          isOpen: true,
+          tipo: "alerta",
+          titulo: "Referência Repetida Precisa de Desempate",
+          mensagem: `As linhas abaixo usam um código que possui mais de um produto cadastrado no catálogo:\n\n${linhasAmbiguas.slice(0, 10).join(", ")}${linhasAmbiguas.length > 10 ? `... e mais ${linhasAmbiguas.length - 10} linha(s)` : ""}\n\nMapeie a Coluna do EAN-13 e/ou a Coluna da Descrição no painel (ou preencha na planilha) para o sistema identificar exatamente qual produto é de cada linha.`,
+        });
+        setLoading(false);
+        setStatusMsg("");
+        return;
+      }
+
       // TRAVA DURA DE COMPLIANCE: Bloqueia geração se houver produtos sem Inmetro ou com certificado vencido
       const hojeIso = new Date().toISOString().split("T")[0];
       const produtosSemInmetro: string[] = [];
 
-      itensPlanilha.forEach((item) => {
-        const prod = produtosMap.get(item.fty_no.trim().toUpperCase());
-        
+      itensResolvidos.forEach(({ fty_no, prod }) => {
         // 1. Bloqueia se o produto não tem família vinculada no banco
         if (!prod || !(prod as any).familia_id || !prod.inmetro_familias || !prod.inmetro_familias.numero_registro) {
-          produtosSemInmetro.push(item.fty_no);
-        } 
+          produtosSemInmetro.push(fty_no);
+        }
         // 2. Bloqueia se o certificado vinculado estiver vencido ou marcado como sem registro
         else if (
           prod.inmetro_familias.status === "Vencido" ||
           prod.inmetro_familias.status === "Sem Registro" ||
           (prod.inmetro_familias.data_validade && prod.inmetro_familias.data_validade < hojeIso)
         ) {
-          produtosSemInmetro.push(`${item.fty_no} (Certificado Vencido)`);
+          produtosSemInmetro.push(`${fty_no} (Certificado Vencido)`);
         }
       });
 
@@ -796,9 +991,7 @@ export default function LiquidificadorPage() {
       }
 
       // ETAPA 3 DO FUNIL: Controle Interno (Ref. do Importador - Aviso Amigável)
-      const itensSemRef = itensPlanilha.filter(
-        (i) => !produtosMap.get(i.fty_no.trim().toUpperCase())?.referencia_interna
-      );
+      const itensSemRef = itensResolvidos.filter((i) => !i.prod.referencia_interna);
 
       if (itensSemRef.length > 0 && ignorarAvisoRef !== true) {
         setLoading(false);
@@ -825,9 +1018,12 @@ export default function LiquidificadorPage() {
       // 4. Injeção calibrada das Etiquetas nas células
       setStatusMsg("Limpando etiquetas antigas e inserindo as novas em alta definição...");
 
-      const colIndex = colunaEtiqueta.toUpperCase().charCodeAt(0) - 65;
+      const colEtqUpper = colunaEtiqueta.toUpperCase().trim();
+      const colIndex = colEtqUpper.length === 1
+        ? colEtqUpper.charCodeAt(0) - 65
+        : (colEtqUpper.charCodeAt(0) - 64) * 26 + (colEtqUpper.charCodeAt(1) - 65);
 
-      // FAXINA INTELIGENTE: Remove qualquer etiqueta velha da Coluna C preservando as fotos da Coluna B
+      // FAXINA INTELIGENTE PADRÃO GIT: Remove apenas etiquetas antigas da coluna alvo, preservando fotos e a árvore do Excel
       if ((worksheet as any)._media) {
         (worksheet as any)._media = (worksheet as any)._media.filter((m: any) => {
           const colOrigem = Math.floor(m.range?.tl?.col ?? (m.range?.tl as any)?.nativeCol ?? -1);
@@ -835,29 +1031,21 @@ export default function LiquidificadorPage() {
         });
       }
 
-      // Enquadra a coluna das fotos (B) para ficarem ajustadas e centralizadas
-      worksheet.getColumn("B").width = 24;
-
-      // Largura ideal da coluna de etiquetas (32)
+      // Largura ideal apenas da coluna de etiquetas (não altera a coluna B nem outras colunas)
       worksheet.getColumn(colunaEtiqueta).width = 32;
 
       // Array isolado apenas para armazenar as imagens para o PDF (não afeta o Excel)
-      const etiquetasParaPdf: { fty_no: string; buffer: ArrayBuffer }[] = [];
+      const etiquetasParaPdf: { prodId: string; fty_no: string; buffer: ArrayBuffer }[] = [];
 
-      for (const item of itensPlanilha) {
-        const prod = produtosMap.get(item.fty_no.trim().toUpperCase());
-        if (!prod) continue;
+      for (const item of itensResolvidos) {
+        const prod = item.prod;
 
-        // Se o operador preencheu uma descrição específica nesta linha da planilha, usamos ela na etiqueta
-        const prodComDescricaoPlanilha: ProdutoDB = {
-          ...prod,
-          descricao: item.descricao && item.descricao !== "PRODUTO IMPORTADO" ? item.descricao : prod.descricao,
-        };
-
-        const imgBuffer = await renderizarEtiquetaParaBuffer(prodComDescricaoPlanilha);
+        // Usa os dados oficiais 100% casados no Supabase (nunca mistura título de outro item)
+        const imgBuffer = await renderizarEtiquetaParaBuffer(prod);
 
         // Guarda cópia em memória para caso a cliente queira o PDF
         etiquetasParaPdf.push({
+          prodId: prod.id,
           fty_no: item.fty_no,
           buffer: imgBuffer,
         });
@@ -879,6 +1067,15 @@ export default function LiquidificadorPage() {
 
       // 5. Gera o arquivo final e inicia o Download
       setStatusMsg("Finalizando e preparando download...");
+
+      // Remove os modelos corrompidos de dropdowns e formatações das abas chinesas
+      // Isso impede o ExcelJS de gerar XML inválido e blinda o arquivo contra a exclusão das imagens
+      workbook.worksheets.forEach((ws: any) => {
+        ws.dataValidations = { model: {} };
+        ws.conditionalFormatting = [];
+        ws.conditionalFormattings = [];
+      });
+
       const outputBuffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([outputBuffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -887,13 +1084,12 @@ export default function LiquidificadorPage() {
       const url = window.URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `ETIQUETAS_${file.name}`;
+      const nomeBase = file.name.replace(/\.[^/.]+$/, "");
+      anchor.download = `ETIQUETAS_${nomeBase}.xlsx`;
       anchor.click();
       window.URL.revokeObjectURL(url);
 
-      const semRefContagem = itensPlanilha.filter(
-        (i) => !produtosMap.get(i.fty_no.trim().toUpperCase())?.referencia_interna
-      ).length;
+      const semRefContagem = itensResolvidos.filter((i) => !i.prod.referencia_interna).length;
 
       if (semRefContagem > 0) {
         setStatusMsg(`Planilha baixada! Aviso: ${semRefContagem} item(ns) sem Ref usaram o código de fábrica.`);
@@ -981,9 +1177,30 @@ export default function LiquidificadorPage() {
         
         {/* Painel de Upload e Configuração */}
         <div className="lg:col-span-8 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-6">
-          <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">
-            Configuração da Planilha (.xlsx)
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+            <h2 className="text-base font-bold text-slate-900">
+              Configuração da Planilha
+            </h2>
+            <div
+              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl border transition-colors ${
+                !linhaInicio.trim()
+                  ? "bg-blue-50/90 border-blue-300 shadow-2xs"
+                  : "bg-emerald-50/60 border-emerald-200"
+              }`}
+            >
+              <label className="text-xs font-extrabold text-blue-900 uppercase tracking-wider whitespace-nowrap">
+                Iniciar na Linha
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={linhaInicio}
+                onChange={(e) => setLinhaInicio(e.target.value)}
+                placeholder="..."
+                className="w-24 px-2.5 py-1.5 border border-blue-300 rounded-lg text-sm bg-white text-slate-900 font-mono font-extrabold text-center outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+          </div>
 
           {/* 1. SELETOR DE IMPORTADOR DA CARGA */}
           <div className="space-y-4">
@@ -1032,7 +1249,7 @@ export default function LiquidificadorPage() {
             <input
               type="file"
               id="excel-upload"
-              accept=".xlsx, .xls"
+              accept=".xlsx, .xlsm, .xls"
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) {
@@ -1049,67 +1266,87 @@ export default function LiquidificadorPage() {
               </div>
               <div>
                 <p className="text-sm font-bold text-slate-800">
-                  {file ? file.name : "Clique para selecionar"}
+                  {file ? file.name : "Clique e Adicione seu Excel"}
                 </p>
-                <p className="text-xs text-slate-400 mt-1">Formatos aceitos: .xlsx da fábrica chinesa</p>
+                <p className="text-xs text-slate-400 mt-1">Formatos aceitos: .xlsx ou .xlsm</p>
               </div>
             </label>
           </div>
 
-          {/* Seletores de Colunas (Grid em 3 colunas agora) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          {/* Seletores de Colunas com suporte total de A até AZ */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
             <div>
               <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Coluna do Código (FTY) *
+                Coluna do Código (FTY) 
               </label>
               <select
                 value={colunaFty}
                 onChange={(e) => setColunaFty(e.target.value)}
                 className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
               >
-                {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].map((col) => (
+                <option value="">-- Selecione a Coluna --</option>
+                {OPCOES_COLUNAS_EXCEL.map((col) => (
                   <option key={col} value={col}>
                     Coluna {col}
                   </option>
                 ))}
               </select>
-              <p className="text-[11px] text-slate-400 mt-1">Código do produto na planilha original.</p>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Coluna da Descrição (Nome) *
-              </label>
-              <select
-                value={colunaDescricao}
-                onChange={(e) => setColunaDescricao(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
-              >
-                {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"].map((col) => (
-                  <option key={col} value={col}>
-                    Coluna {col}
-                  </option>
-                ))}
-              </select>
-              <p className="text-[11px] text-slate-400 mt-1">Nome em português digitado na planilha.</p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Coluna da Etiqueta *
+                Coluna da Etiqueta Gerada
               </label>
               <select
                 value={colunaEtiqueta}
                 onChange={(e) => setColunaEtiqueta(e.target.value)}
                 className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
               >
-                {["B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"].map((col) => (
+                <option value="">-- Selecione a Coluna --</option>
+                {OPCOES_COLUNAS_EXCEL.map((col) => (
                   <option key={col} value={col}>
                     Coluna {col}
                   </option>
                 ))}
               </select>
-              <p className="text-[11px] text-slate-400 mt-1">Coluna que receberá as imagens geradas.</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                Coluna da Descrição
+              </label>
+              <select
+                value={colunaDescricao}
+                onChange={(e) => setColunaDescricao(e.target.value)}
+                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
+              >
+                <option value="">-- Opcional --</option>
+                <option value="NONE">Nenhuma (Não possui)</option>
+                {OPCOES_COLUNAS_EXCEL.map((col) => (
+                  <option key={col} value={col}>
+                    Coluna {col}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                Coluna do EAN-13
+              </label>
+              <select
+                value={colunaEan}
+                onChange={(e) => setColunaEan(e.target.value)}
+                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
+              >
+                <option value="">-- Opcional --</option>
+                <option value="NONE">Nenhuma (Não possui)</option>
+                {OPCOES_COLUNAS_EXCEL.map((col) => (
+                  <option key={col} value={col}>
+                    Coluna {col}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

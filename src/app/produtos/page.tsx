@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import ModalAviso from "@/components/ModalAviso";
+import ExcelJS from "exceljs";
 
 interface Empresa {
   id: string;
@@ -31,6 +32,7 @@ interface Produto {
   partes_pequenas: boolean;
   metal: boolean;
   restritivo_0_3_anos: boolean;
+  restritivo_0_4_anos?: boolean;
   idade_minima: string | null;
   empresas: { razao_social: string } | null;
   inmetro_familias: { nome_familia: string; status: string | null; data_validade: string | null } | null;
@@ -75,6 +77,24 @@ export default function ProdutosPage() {
   const [filtroFamilia, setFiltroFamilia] = useState<string>("");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [buscaNome, setBuscaNome] = useState<string>("");
+  // Gera lista completa de colunas de A até AZ (cobre planilhas de até 52 colunas)
+  const OPCOES_COLUNAS_EXCEL = [
+    ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""),
+    ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((c) => "A" + c),
+  ];
+
+  // Estados do Modal Lean de Importação em Lote via Excel
+  const [isModalExcelOpen, setIsModalExcelOpen] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [excelEmpresaId, setExcelEmpresaId] = useState<string>("");
+  const [linhaInicio, setLinhaInicio] = useState<string>("");
+  const [colunaCodigo, setColunaCodigo] = useState<string>("");
+  const [colunaDescricao, setColunaDescricao] = useState<string>("");
+  const [colunaEan, setColunaEan] = useState<string>("");
+  const [colunaFamilia, setColunaFamilia] = useState<string>("");
+  const [colunaIdade, setColunaIdade] = useState<string>("");
+  const [colunaRestricao, setColunaRestricao] = useState<string>("");
+  const [importandoExcel, setImportandoExcel] = useState(false);
 
   // Estados da Seleção em Massa Dinâmica
   const [selecionados, setSelecionados] = useState<string[]>([]);
@@ -178,6 +198,7 @@ export default function ProdutosPage() {
     partes_pequenas: false,
     metal: false,
     restritivo_0_3_anos: false,
+    restritivo_0_4_anos: false,
     idade_minima: "+3 anos",
     avisos_extras: [] as any[],
   });
@@ -185,12 +206,28 @@ export default function ProdutosPage() {
   async function carregarDados() {
     setLoading(true);
 
-    // Carrega produtos, empresas, famílias e avisos customizados em paralelo
+    const buscarTodosProdutos = async () => {
+      const acumulados: any[] = [];
+      let pagina = 0;
+      const tamanhoPagina = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from("produtos")
+          .select("*, empresas(razao_social), inmetro_familias(nome_familia, status, data_validade)")
+          .order("created_at")
+          .range(pagina * tamanhoPagina, (pagina + 1) * tamanhoPagina - 1);
+        if (error) return { data: null, error };
+        if (!data || data.length === 0) break;
+        acumulados.push(...data);
+        if (data.length < tamanhoPagina) break;
+        pagina++;
+      }
+      return { data: acumulados, error: null };
+    };
+
+    // Carrega produtos (paginado >1000), empresas, famílias e avisos customizados em paralelo
     const [prodResult, empResult, famResult, avisosResult] = await Promise.all([
-      supabase
-        .from("produtos")
-        .select("*, empresas(razao_social), inmetro_familias(nome_familia, status, data_validade)")
-        .order("created_at"),
+      buscarTodosProdutos(),
       supabase
         .from("empresas")
         .select("id, razao_social")
@@ -269,6 +306,7 @@ export default function ProdutosPage() {
       partes_pequenas: false,
       metal: false,
       restritivo_0_3_anos: false,
+      restritivo_0_4_anos: false,
       idade_minima: "+3 anos",
       avisos_extras: [],
     });
@@ -295,6 +333,7 @@ export default function ProdutosPage() {
       partes_pequenas: prod.partes_pequenas,
       metal: prod.metal,
       restritivo_0_3_anos: prod.restritivo_0_3_anos,
+      restritivo_0_4_anos: Boolean(prod.restritivo_0_4_anos),
       idade_minima: prod.idade_minima || "+3 anos",
       avisos_extras: (prod as any).avisos_extras || [],
     });
@@ -361,13 +400,14 @@ export default function ProdutosPage() {
           partes_pequenas: formData.partes_pequenas,
           metal: formData.metal,
           restritivo_0_3_anos: formData.restritivo_0_3_anos,
+          restritivo_0_4_anos: formData.restritivo_0_4_anos,
           idade_minima: formData.idade_minima || null,
           avisos_extras: formData.avisos_extras,
         })
         .eq("id", editingId);
 
       if (updateError) {
-        setError("Erro ao atualizar produto. Verifique se o FTY NO está duplicado.");
+        setError("Erro ao atualizar produto. Verifique se já existe um produto idêntico cadastrado.");
         setSaving(false);
       } else {
         setIsModalOpen(false);
@@ -392,6 +432,7 @@ export default function ProdutosPage() {
           partes_pequenas: formData.partes_pequenas,
           metal: formData.metal,
           restritivo_0_3_anos: formData.restritivo_0_3_anos,
+          restritivo_0_4_anos: formData.restritivo_0_4_anos,
           idade_minima: formData.idade_minima || null,
           avisos_extras: formData.avisos_extras,
         },
@@ -399,7 +440,7 @@ export default function ProdutosPage() {
 
       if (insertError) {
         if (insertError.code === "23505") {
-          setError("Este código FTY NO já está cadastrado para este importador.");
+          setError("Este produto (mesmo código, descrição e EAN) já está cadastrado para este importador.");
         } else {
           setError("Erro ao cadastrar produto.");
         }
@@ -409,6 +450,296 @@ export default function ProdutosPage() {
         await carregarDados();
         setSaving(false);
       }
+    }
+  }
+
+  // Processamento em Lote com Auto-Match de Família Inmetro e Baseline de Segurança
+  async function handleImportarExcelProdutos(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!excelFile) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Arquivo Obrigatório",
+        mensagem: "Selecione o arquivo Excel (.xlsx ou .xlsm) contendo os produtos.",
+      });
+      return;
+    }
+
+    if (!excelEmpresaId) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Importador Obrigatório",
+        mensagem: "Selecione a qual importador estes produtos pertencem.",
+      });
+      return;
+    }
+
+    const linhaNum = parseInt(linhaInicio.trim(), 10);
+    if (!linhaInicio.trim() || isNaN(linhaNum) || linhaNum < 1) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Linha Inicial Obrigatória",
+        mensagem: "Informe o número da linha onde começam os produtos na planilha (Ex: 21) antes de processar.",
+      });
+      return;
+    }
+
+    if (!colunaCodigo) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Coluna do Código Obrigatória",
+        mensagem: "Selecione qual coluna contém o Código do Produto (Ref / FTY).",
+      });
+      return;
+    }
+
+    if (!colunaDescricao || colunaDescricao === "NONE") {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Coluna da Descrição Obrigatória",
+        mensagem: "Por favor, selecione qual coluna da planilha contém a Descrição Comercial do produto.",
+      });
+      return;
+    }
+
+    setImportandoExcel(true);
+
+    try {
+      const buffer = await excelFile.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        throw new Error("Nenhuma aba encontrada na planilha.");
+      }
+
+      // 1. Busca produtos existentes desse importador para travar duplicidades (Código + Descrição + EAN)
+      const { data: prodsExistentes, error: errProd } = await supabase
+        .from("produtos")
+        .select("fty_no, descricao, ean_13")
+        .eq("empresa_id", excelEmpresaId);
+
+      if (errProd) throw new Error("Erro ao consultar catálogo existente: " + errProd.message);
+
+      const chavesExistentes3 = new Set(
+        (prodsExistentes || []).map((p) => {
+          const cod = (p.fty_no || "").trim().toUpperCase();
+          const desc = (p.descricao || "").trim().toUpperCase();
+          const ean = (p.ean_13 || "").replace(/["'\s-]/g, "").trim().toUpperCase();
+          return `${cod}:::${desc}:::${ean}`;
+        })
+      );
+
+      const chavesExistentes2 = new Set(
+        (prodsExistentes || []).map((p) => {
+          const cod = (p.fty_no || "").trim().toUpperCase();
+          const desc = (p.descricao || "").trim().toUpperCase();
+          return `${cod}:::${desc}`;
+        })
+      );
+
+      // 2. Busca famílias cadastradas desse importador para o Auto-Match
+      const { data: famsExistentes, error: errFam } = await supabase
+        .from("inmetro_familias")
+        .select("id, codigo_ocp, nome_familia")
+        .eq("empresa_id", excelEmpresaId);
+
+      if (errFam) throw new Error("Erro ao consultar famílias Inmetro: " + errFam.message);
+
+      // Mapa duplo: acha família tanto pelo Nº (ex: "1") quanto pelo Nome
+      const mapaFamilias = new Map<string, string>();
+      (famsExistentes || []).forEach((f) => {
+        if (f.codigo_ocp) mapaFamilias.set(f.codigo_ocp.trim().toUpperCase(), f.id);
+        if (f.nome_familia) mapaFamilias.set(f.nome_familia.trim().toUpperCase(), f.id);
+      });
+
+      // Helper seguro contra fórmulas e nulos
+      const extrairTextoSeguro = (celula: ExcelJS.Cell | null | undefined): string => {
+        if (!celula) return "";
+        try {
+          const val = celula.value;
+          if (val === null || val === undefined) return "";
+          if (typeof val === "object") {
+            if ("result" in val) return val.result !== null && val.result !== undefined ? String(val.result).trim() : "";
+            if (Array.isArray((val as any).richText)) return (val as any).richText.map((t: any) => t.text || "").join("").trim();
+            if ("text" in val) return String((val as any).text || "").trim();
+          }
+          return String(val).trim();
+        } catch {
+          return "";
+        }
+      };
+
+      const numLinhaCorte = linhaInicio.trim() ? parseInt(linhaInicio.trim(), 10) : null;
+      const processadosNestaPlanilha = new Set<string>();
+      const novosProdutos: any[] = [];
+      let totalIgnorados = 0;
+      let totalVinculadosComInmetro = 0;
+
+      const mesAnoAtual = `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`;
+
+      worksheet.eachRow((row, rowNumber) => {
+        if (numLinhaCorte !== null && !isNaN(numLinhaCorte)) {
+          if (rowNumber < numLinhaCorte) return;
+        }
+
+        const rawCodigo = extrairTextoSeguro(row.getCell(colunaCodigo));
+        if (!rawCodigo) return;
+
+        // Lista negra de cabeçalhos
+        const cabecalhosIgnorar = ["ITEM", "REF", "FTY", "CÓDIGO", "CODIGO", "REFERÊNCIA", "MODELO", "PRODUTO"];
+        if (cabecalhosIgnorar.includes(rawCodigo.trim().toUpperCase())) return;
+
+        // Descrição comercial
+        let rawDesc = colunaDescricao && colunaDescricao !== "NONE"
+          ? extrairTextoSeguro(row.getCell(colunaDescricao))
+          : rawCodigo;
+        if (!rawDesc) rawDesc = rawCodigo;
+
+        // Código de barras: só aceita se tiver exatamente 13 dígitos numéricos; caso contrário gera GS1 Brasil 789 automático
+        let rawEan = colunaEan && colunaEan !== "NONE"
+          ? extrairTextoSeguro(row.getCell(colunaEan))
+          : "";
+        const eanDigitos = rawEan ? rawEan.replace(/["'\s-]/g, "").trim() : "";
+        const eanLimpo = /^\d{13}$/.test(eanDigitos) ? eanDigitos : "";
+        const eanNorm = eanLimpo.toUpperCase();
+        const codNorm = rawCodigo.trim().toUpperCase();
+        const descNorm = rawDesc.trim().toUpperCase();
+
+        // Se a linha trouxer EAN, trava pelos 3 campos (Código + Descrição + EAN).
+        // Se não trouxer EAN, trava por 2 campos (Código + Descrição).
+        const chaveUnica = eanNorm
+          ? `${codNorm}:::${descNorm}:::${eanNorm}`
+          : `${codNorm}:::${descNorm}`;
+
+        const jaExisteNoBanco = eanNorm
+          ? chavesExistentes3.has(chaveUnica)
+          : chavesExistentes2.has(chaveUnica);
+
+        // Trava anti-duplicidade
+        if (jaExisteNoBanco || processadosNestaPlanilha.has(chaveUnica)) {
+          totalIgnorados++;
+          return;
+        }
+
+        processadosNestaPlanilha.add(chaveUnica);
+
+        const eanFinal = eanLimpo || gerarEan13Valido();
+
+        // CASAMENTO AUTOMÁTICO COM INMETRO (Coluna C da BRICS)
+        let familiaIdFinal: string | null = null;
+        if (colunaFamilia && colunaFamilia !== "NONE") {
+          const rawFam = extrairTextoSeguro(row.getCell(colunaFamilia)).toUpperCase();
+          if (mapaFamilias.has(rawFam)) {
+            familiaIdFinal = mapaFamilias.get(rawFam)!;
+            totalVinculadosComInmetro++;
+          }
+        }
+
+        // Leitura opcional da Faixa Etária (ex: +4 anos, 0+, +3 anos)
+        let idadeFinal = "+3 anos";
+        if (colunaIdade && colunaIdade !== "NONE") {
+          const rawIdade = extrairTextoSeguro(row.getCell(colunaIdade)).trim();
+          if (rawIdade && !/^(NA|NÃO APLICÁVEL|NAO APLICAVEL|-)$/i.test(rawIdade)) {
+            if (/^(\+?0+|0+\+?|\+?0\s*ano|TODAS AS IDADES)/i.test(rawIdade)) {
+              idadeFinal = "0+";
+            } else {
+              idadeFinal = rawIdade;
+            }
+          }
+        }
+
+        // Leitura opcional da Restrição Etária (0-3, 0-4 ou Sem restrição)
+        let partesPequenasFinal = true;
+        let restritivo03Final = true;
+        let restritivo04Final = false;
+
+        if (colunaRestricao && colunaRestricao !== "NONE") {
+          const rawRestr = extrairTextoSeguro(row.getCell(colunaRestricao)).trim();
+          if (rawRestr) {
+            if (/SEM\s*RESTRI|^N[ÃA]O$|^N[ÃA]O\s*APLIC|^NA$/i.test(rawRestr)) {
+              partesPequenasFinal = false;
+              restritivo03Final = false;
+              restritivo04Final = false;
+            } else if (/0\s*[-–aA]\s*4|MENOR(ES)?\s*(DE)?\s*4/i.test(rawRestr)) {
+              partesPequenasFinal = true;
+              restritivo03Final = false;
+              restritivo04Final = true;
+            } else if (/0\s*[-–aA]\s*3|MENOR(ES)?\s*(DE)?\s*3|^SIM$/i.test(rawRestr)) {
+              partesPequenasFinal = true;
+              restritivo03Final = true;
+              restritivo04Final = false;
+            }
+          }
+        }
+
+        // Injeta produto com o Baseline Padrão Ouro de Segurança (respeitando idade/restrição se mapeadas)
+        novosProdutos.push({
+          empresa_id: excelEmpresaId,
+          familia_id: familiaIdFinal,
+          fty_no: rawCodigo,
+          referencia_interna: rawCodigo,
+          descricao: rawDesc.toUpperCase(),
+          ean_13: eanFinal,
+          ean_barras: null,
+          data_fabricacao: mesAnoAtual,
+          lote: mesAnoAtual,
+          usa_pilha: false,
+          contem_ima: false,
+          partes_pequenas: partesPequenasFinal,
+          metal: false,
+          restritivo_0_3_anos: restritivo03Final,
+          restritivo_0_4_anos: restritivo04Final,
+          idade_minima: idadeFinal,
+          avisos_extras: [],
+        });
+      });
+
+      if (novosProdutos.length === 0) {
+        setImportandoExcel(false);
+        setIsModalExcelOpen(false);
+        setModalAviso({
+          isOpen: true,
+          tipo: "alerta",
+          titulo: "Nenhum Produto Novo",
+          mensagem: totalIgnorados > 0
+            ? `Todos os ${totalIgnorados} produto(s) lidos desta planilha já estavam cadastrados no catálogo ou repetidos na planilha e foram ignorados com segurança.`
+            : "Nenhum produto válido foi identificado a partir da linha indicada.",
+        });
+        return;
+      }
+
+      // Insere produtos em lote no banco
+      const { error: insertError } = await supabase.from("produtos").insert(novosProdutos);
+      if (insertError) throw new Error("Erro ao salvar produtos no banco: " + insertError.message);
+
+      await carregarDados();
+      setIsModalExcelOpen(false);
+      setExcelFile(null);
+
+      setModalAviso({
+        isOpen: true,
+        tipo: "sucesso",
+        titulo: "Importação Concluída com Sucesso!",
+        mensagem: `• ${novosProdutos.length} novo(s) produto(s) cadastrado(s).\n• ${totalVinculadosComInmetro} já amarrado(s) automaticamente à sua Família Inmetro.\n• ${totalIgnorados} produto(s) já existiam no catálogo ou estavam repetidos na planilha e foram ignorados com segurança.`,
+      });
+    } catch (err: any) {
+      console.error("Erro na importação de produtos:", err);
+      setModalAviso({
+        isOpen: true,
+        tipo: "perigo",
+        titulo: "Erro na Importação",
+        mensagem: err.message || "Ocorreu um erro ao processar a planilha de produtos.",
+      });
+    } finally {
+      setImportandoExcel(false);
     }
   }
 
@@ -469,16 +800,35 @@ export default function ProdutosPage() {
             Gerencie itens importados, códigos de barras e regras de rotulagem.
           </p>
         </div>
-        <button
-          onClick={handleNovo}
-          disabled={empresas.length === 0}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 disabled:opacity-50 self-start sm:self-auto"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-          </svg>
-          <span>Novo Produto</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+          {/* Botão Novo: Importar Planilha de Produtos */}
+          <button
+            onClick={() => {
+              setExcelFile(null);
+              setExcelEmpresaId(filtroEmpresa || "");
+              setIsModalExcelOpen(true);
+            }}
+            disabled={empresas.length === 0}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <span>Importar Planilha</span>
+          </button>
+
+          {/* Botão Manual Original (100% intacto) */}
+          <button
+            onClick={handleNovo}
+            disabled={empresas.length === 0}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center space-x-2 disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Novo Produto</span>
+          </button>
+        </div>
       </div>
 
       {/* PAINEL DE MONITORAMENTO E DIAGNÓSTICO */}
@@ -649,19 +999,19 @@ export default function ProdutosPage() {
           </div>
 
           {/* 3. Filtro por Família */}
-          <div>
+          <div className="min-w-0">
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               Família Inmetro
             </label>
             <select
               value={filtroFamilia}
               onChange={(e) => setFiltroFamilia(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition"
+              className="w-full max-w-full truncate px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition"
             >
               <option value="">Todas as Famílias</option>
               {familiasParaFiltro.map((fam) => (
-                <option key={fam.id} value={fam.id}>
-                  {fam.nome_familia}
+                <option key={fam.id} value={fam.id} title={fam.nome_familia}>
+                  {fam.nome_familia.length > 60 ? `${fam.nome_familia.slice(0, 60)}...` : fam.nome_familia}
                 </option>
               ))}
             </select>
@@ -843,19 +1193,19 @@ export default function ProdutosPage() {
                     </select>
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <label className="block text-xs font-bold text-slate-900 mb-1">
                       Família Certificada (Inmetro)
                     </label>
                     <select
                       value={formData.familia_id}
                       onChange={(e) => setFormData({ ...formData, familia_id: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-900 font-medium focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition"
+                      className="w-full max-w-full truncate px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-900 font-medium focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition"
                     >
                       <option value="">Sem Registro (Opcional)</option>
                       {familiasFiltradas.map((fam) => (
-                        <option key={fam.id} value={fam.id}>
-                          {fam.nome_familia}
+                        <option key={fam.id} value={fam.id} title={fam.nome_familia}>
+                          {fam.nome_familia.length > 60 ? `${fam.nome_familia.slice(0, 60)}...` : fam.nome_familia}
                         </option>
                       ))}
                     </select>
@@ -865,7 +1215,7 @@ export default function ProdutosPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
                   <div>
                     <label className="block text-xs font-bold text-slate-900 mb-1">
-                      Código da Fábrica (Item / FTY NO) *
+                      Código / Ref / FTY  *
                     </label>
                     <input
                       type="text"
@@ -879,7 +1229,7 @@ export default function ProdutosPage() {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-900 mb-1">
-                      Ref. do Importador (Inmetro / Interna)
+                      Ref. do Importador
                     </label>
                     <input
                       type="text"
@@ -1068,10 +1418,33 @@ export default function ProdutosPage() {
                         <input
                           type="checkbox"
                           checked={formData.restritivo_0_3_anos}
-                          onChange={(e) => setFormData({ ...formData, restritivo_0_3_anos: e.target.checked })}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              restritivo_0_3_anos: e.target.checked,
+                              ...(e.target.checked ? { restritivo_0_4_anos: false } : {}),
+                            })
+                          }
                           className="rounded text-rose-600 focus:ring-rose-500 h-4 w-4"
                         />
                         <span>Restritivo para menores de 3 anos (Exibe Selo Gráfico 0-3)</span>
+                      </label>
+
+                      {/* Selo 0-4 Anos protegido */}
+                      <label className="flex items-center space-x-2.5 text-rose-900 text-xs font-bold cursor-pointer select-none bg-rose-50/80 p-2.5 rounded-xl border border-rose-200 col-span-1 sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          checked={formData.restritivo_0_4_anos}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              restritivo_0_4_anos: e.target.checked,
+                              ...(e.target.checked ? { restritivo_0_3_anos: false } : {}),
+                            })
+                          }
+                          className="rounded text-rose-600 focus:ring-rose-500 h-4 w-4"
+                        />
+                        <span>Restritivo para menores de 4 anos (Exibe Selo Gráfico 0-4)</span>
                       </label>
                     </div>
                   </div>
@@ -1213,12 +1586,12 @@ export default function ProdutosPage() {
                   <select
                     value={familiaLoteId}
                     onChange={(e) => setFamiliaLoteId(e.target.value)}
-                    className="bg-slate-800 text-white border border-slate-700 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium max-w-xs"
+                    className="bg-slate-800 text-white border border-slate-700 text-xs rounded-xl px-3 py-2 outline-none focus:border-blue-500 font-medium w-full max-w-xs truncate"
                   >
                     <option value="">- Selecione o Certificado -</option>
                     {familiasParaLote.map((fam) => (
-                      <option key={fam.id} value={fam.id}>
-                        {fam.nome_familia}
+                      <option key={fam.id} value={fam.id} title={fam.nome_familia}>
+                        {fam.nome_familia.length > 55 ? `${fam.nome_familia.slice(0, 55)}...` : fam.nome_familia}
                       </option>
                     ))}
                   </select>
@@ -1255,6 +1628,251 @@ export default function ProdutosPage() {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* NOVO MODAL LEAN: IMPORTAÇÃO EM LOTE DE PRODUTOS */}
+      {isModalExcelOpen && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-xl w-full p-6 space-y-5 overflow-y-auto max-h-[92vh] animate-in fade-in zoom-in duration-150">
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-200">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Importar Catálogo de Produtos</h3>
+                  <p className="text-xs text-slate-500">Cadastre brinquedos em lote e amarre automaticamente ao Inmetro.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsModalExcelOpen(false)}
+                className="text-slate-400 hover:text-slate-700 p-2 rounded-xl hover:bg-slate-100 transition"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleImportarExcelProdutos} className="space-y-4">
+              {/* 1. Seleção do Importador */}
+              <div>
+                <label className="block text-xs font-bold text-slate-900 mb-1">
+                  Importador Dono destes Produtos *
+                </label>
+                <select
+                  required
+                  value={excelEmpresaId}
+                  onChange={(e) => setExcelEmpresaId(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-xs bg-white text-slate-900 font-semibold focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10 outline-none transition"
+                >
+                  <option value="">-- Selecione o Importador --</option>
+                  {empresas.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.razao_social}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Upload do Arquivo (.xlsx ou .xlsm) */}
+              <div className="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center hover:border-emerald-500 transition-colors bg-slate-50/50">
+                <input
+                  type="file"
+                  id="excel-prod-upload"
+                  accept=".xlsx, .xlsm, .xls"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) setExcelFile(f);
+                  }}
+                  className="hidden"
+                />
+                <label htmlFor="excel-prod-upload" className="cursor-pointer flex flex-col items-center space-y-2">
+                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">
+                      {excelFile ? excelFile.name : "Clique e Adicione seu Excel"}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Lê automaticamente os dados da primeira aba</p>
+                  </div>
+                </label>
+              </div>
+
+              {/* 3. Mapeamento Enxuto (Apenas os 4 campos vitais + Linha) */}
+              <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-2.5">
+                  <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block">
+                    Mapeamento de Colunas
+                  </span>
+                  
+                  <div
+                    className={`flex items-center gap-2 px-2.5 py-1 rounded-xl border transition-colors ${
+                      !linhaInicio.trim()
+                        ? "bg-blue-50/90 border-blue-300 shadow-2xs"
+                        : "bg-emerald-50/60 border-emerald-200"
+                    }`}
+                  >
+                    <label className="text-[11px] font-extrabold text-blue-900 uppercase tracking-wider whitespace-nowrap">
+                      Iniciar na Linha
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={linhaInicio}
+                      onChange={(e) => setLinhaInicio(e.target.value)}
+                      placeholder="..."
+                      className="w-24 px-2 py-1 border border-blue-300 rounded-lg text-xs bg-white text-slate-900 font-mono font-extrabold text-center outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  {/* Código do Produto */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Código / Ref / FTY *
+                    </label>
+                    <select
+                      value={colunaCodigo}
+                      onChange={(e) => setColunaCodigo(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      <option value="">-- Selecione a Coluna --</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Descrição */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Descrição Comercial *
+                    </label>
+                    <select
+                      value={colunaDescricao}
+                      onChange={(e) => setColunaDescricao(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      <option value="">-- Selecione a Coluna --</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* EAN-13 */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Código de Barras (EAN-13)
+                    </label>
+                    <select
+                      value={colunaEan}
+                      onChange={(e) => setColunaEan(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      <option value="">-- Selecione a Coluna --</option>
+                      <option value="NONE">Nenhuma (Gerar EAN-13 automático)</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Vínculo Inmetro (Coluna C) */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Nº da Família Inmetro (Vínculo)
+                    </label>
+                    <select
+                      value={colunaFamilia}
+                      onChange={(e) => setColunaFamilia(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      <option value="">-- Selecione a Coluna --</option>
+                      <option value="NONE">Nenhuma (Deixar sem registro)</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Indicação de Faixa Etária (Opcional) */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Indicação de Faixa Etária
+                    </label>
+                    <select
+                      value={colunaIdade}
+                      onChange={(e) => setColunaIdade(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      <option value="">-- Opcional (Padrão +3 anos) --</option>
+                      <option value="NONE">Nenhuma (Usar padrão +3 anos)</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Restrição Etária 0-3 / 0-4 / Sem restrição (Opcional) */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Restrição Etária (0-3 / 0-4)
+                    </label>
+                    <select
+                      value={colunaRestricao}
+                      onChange={(e) => setColunaRestricao(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      <option value="">-- Opcional (Padrão 0-3) --</option>
+                      <option value="NONE">Nenhuma (Usar padrão 0-3)</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-700 pt-1">
+                  * Os produtos nascerão com as proteções padrão de brinquedos (0-3 anos ativo). Ajustes pontuais podem ser feitos na edição individual.
+                </p>
+              </div>
+
+              {/* Botões */}
+              <div className="pt-3 border-t border-slate-100 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalExcelOpen(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={importandoExcel || !excelFile || !excelEmpresaId}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm hover:shadow-md transition flex items-center space-x-2 disabled:opacity-50"
+                >
+                  {importandoExcel ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white"></div>
+                      <span>Importando Produtos...</span>
+                    </>
+                  ) : (
+                    <span>Processar e Cadastrar</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

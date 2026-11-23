@@ -7,6 +7,7 @@ import ModalAviso from "@/components/ModalAviso";
 
 interface Produto {
   id: string;
+  empresa_id?: string;
   fty_no: string;
   referencia_interna?: string | null;
   descricao: string;
@@ -19,6 +20,7 @@ interface Produto {
   partes_pequenas: boolean;
   metal: boolean;
   restritivo_0_3_anos: boolean;
+  restritivo_0_4_anos?: boolean;
   idade_minima: string | null;
   empresas: {
     razao_social: string;
@@ -43,6 +45,7 @@ export default function GeradorEtiquetasPage() {
   const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState<string>(""); // Campo de busca instantânea
+  const [filtroEmpresa, setFiltroEmpresa] = useState<string>("");
   const [avisosCustom, setAvisosCustom] = useState<{ id: string; texto_aviso: string }[]>([]);
 
   // Controle das Abas de Modalidade
@@ -85,18 +88,35 @@ export default function GeradorEtiquetasPage() {
     }
   }, [produtoSelecionado]);
 
-  // Carrega os produtos com todas as suas relações de empresas e certificados
+  // Carrega os produtos com todas as suas relações de empresas e certificados (paginado >1000)
   async function carregarProdutos() {
     setLoading(true);
+
+    const buscarTodosProdutos = async () => {
+      const acumulados: any[] = [];
+      let pagina = 0;
+      const tamanhoPagina = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from("produtos")
+          .select(`
+            *,
+            empresas(razao_social, cnpj, endereco, sac_email, logo_url),
+            inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero, codigo_ocp, status, data_validade)
+          `)
+          .order("descricao")
+          .range(pagina * tamanhoPagina, (pagina + 1) * tamanhoPagina - 1);
+        if (error) return { data: null, error };
+        if (!data || data.length === 0) break;
+        acumulados.push(...data);
+        if (data.length < tamanhoPagina) break;
+        pagina++;
+      }
+      return { data: acumulados, error: null };
+    };
+
     const [prodRes, avisosRes] = await Promise.all([
-      supabase
-        .from("produtos")
-        .select(`
-          *,
-          empresas(razao_social, cnpj, endereco, sac_email, logo_url),
-          inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero, codigo_ocp, status, data_validade)
-        `)
-        .order("descricao"),
+      buscarTodosProdutos(),
       supabase
         .from("avisos_customizados")
         .select("id, texto_aviso")
@@ -197,14 +217,30 @@ export default function GeradorEtiquetasPage() {
     produtoSelecionado.inmetro_familias.status === "Sem Registro" ||
     (produtoSelecionado.inmetro_familias.data_validade ? produtoSelecionado.inmetro_familias.data_validade < hojeString : false);
 
-  // Filtro instantâneo por código FTY NO ou descrição
+  // Lista única de importadores carregados (sem consulta extra)
+  const empresasDisponiveis = Array.from(
+    new Map(
+      produtos
+        .filter((p) => p.empresa_id && p.empresas?.razao_social)
+        .map((p) => [p.empresa_id!, p.empresas!.razao_social])
+    ).entries()
+  )
+    .map(([id, razao_social]) => ({ id, razao_social }))
+    .sort((a, b) => a.razao_social.localeCompare(b.razao_social));
+
+  // Filtro inteligente por Importador e busca (FTY NO, Nome ou EAN)
   const produtosFiltrados = produtos.filter((prod) => {
-    if (!busca.trim()) return true;
-    const termo = busca.toLowerCase();
-    return (
-      prod.fty_no.toLowerCase().includes(termo) ||
-      prod.descricao.toLowerCase().includes(termo)
-    );
+    if (filtroEmpresa && prod.empresa_id !== filtroEmpresa) return false;
+
+    if (busca.trim()) {
+      const termo = busca.toLowerCase();
+      const bateFty = prod.fty_no.toLowerCase().includes(termo);
+      const bateDesc = prod.descricao.toLowerCase().includes(termo);
+      const bateEan = (prod.ean_13 || "").toLowerCase().includes(termo);
+      if (!bateFty && !bateDesc && !bateEan) return false;
+    }
+
+    return true;
   });
 
   return (
@@ -297,37 +333,66 @@ export default function GeradorEtiquetasPage() {
       {/* Grid de Operação - Ocultado na Impressão */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 print:block">
         {/* Lado Esquerdo: Seleção do Produto (4 Colunas) */}
-        <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-3 print:hidden flex flex-col h-fit">
+        <div className="lg:col-span-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-3 print:hidden flex flex-col h-fit min-w-0">
           <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
             <h2 className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-              Catálogo de Produtos ({produtosFiltrados.length})
+              Catálogo ({produtosFiltrados.length})
             </h2>
-            <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-md">
-              Selecione
-            </span>
-          </div>
-
-          {/* Campo de Busca Rápida por FTY NO */}
-          <div className="relative">
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por FTY NO ou nome..."
-              className="w-full pl-8 pr-7 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50/60 focus:bg-white focus:border-blue-500 outline-none transition font-medium"
-            />
-            <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            {busca && (
-              <button 
-                onClick={() => setBusca("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+            {(filtroEmpresa || busca) ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setFiltroEmpresa("");
+                  setBusca("");
+                }}
+                className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold transition"
               >
-                ✕
+                Limpar filtros
               </button>
+            ) : (
+              <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-md">
+                Selecione
+              </span>
             )}
           </div>
+
+          {/* Filtro por Importador + Busca + Situação */}
+          <div className="space-y-2">
+            <select
+              value={filtroEmpresa}
+              onChange={(e) => setFiltroEmpresa(e.target.value)}
+              className="w-full max-w-full truncate px-3 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50/60 focus:bg-white focus:border-blue-500 outline-none transition font-semibold text-slate-700"
+            >
+              <option value="">Todos os Importadores</option>
+              {empresasDisponiveis.map((emp) => (
+                <option key={emp.id} value={emp.id} title={emp.razao_social}>
+                  {emp.razao_social.length > 50 ? `${emp.razao_social.slice(0, 50)}...` : emp.razao_social}
+                </option>
+              ))}
+            </select>
+
+            <div className="relative">
+              <input
+                type="text"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar FTY, nome ou EAN..."
+                className="w-full pl-8 pr-7 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50/60 focus:bg-white focus:border-blue-500 outline-none transition font-medium"
+              />
+              <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              {busca && (
+                <button
+                  onClick={() => setBusca("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            </div>
 
           {loading ? (
             <div className="text-center py-12 text-slate-400 text-sm">
@@ -335,14 +400,15 @@ export default function GeradorEtiquetasPage() {
               Carregando catálogo...
             </div>
           ) : produtosFiltrados.length > 0 ? (
-            <div className="space-y-2.5 max-h-[480px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[470px] overflow-y-auto pr-1">
               {produtosFiltrados.map((prod) => {
                 const isSelected = produtoSelecionado?.id === prod.id;
+                const empresaCurta = prod.empresas?.razao_social?.trim().split(" ")[0];
                 return (
                   <button
                     key={prod.id}
                     onClick={() => setProdutoSelecionado(prod)}
-                    className={`w-full text-left p-3.5 rounded-xl border transition-all duration-150 relative overflow-hidden ${
+                    className={`w-full text-left p-3 rounded-xl border transition-all duration-150 relative overflow-hidden ${
                       isSelected
                         ? "border-blue-500 bg-blue-50/60 shadow-xs ring-1 ring-blue-500/20"
                         : "border-slate-200/70 hover:border-slate-300 hover:bg-slate-50/70 bg-white"
@@ -352,24 +418,30 @@ export default function GeradorEtiquetasPage() {
                       <div className="absolute top-0 left-0 bottom-0 w-1 bg-blue-600"></div>
                     )}
                     <div className="flex items-start justify-between gap-2">
-                      <p className={`text-sm font-semibold leading-tight line-clamp-1 ${isSelected ? "text-blue-900" : "text-slate-800"}`}>
+                      <p className={`text-xs font-bold leading-snug line-clamp-1 ${isSelected ? "text-blue-900" : "text-slate-800"}`}>
                         {prod.descricao}
                       </p>
                     </div>
-                    <div className="flex items-center space-x-2 mt-2">
-                      <span className="text-[11px] font-mono font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
-                        FTY: {prod.fty_no}
+                    <div className="flex items-center justify-between gap-2 mt-2">
+                      <span className="text-[11px] font-mono font-bold text-blue-700 bg-blue-50/80 border border-blue-100 px-2 py-0.5 rounded-md">
+                        {prod.fty_no}
                       </span>
-                      <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
-                        {prod.empresas?.razao_social}
-                      </span>
+                      {empresaCurta && (
+                        <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md uppercase tracking-wide truncate max-w-[110px]">
+                          {empresaCurta}
+                        </span>
+                      )}
                     </div>
                   </button>
                 );
               })}
             </div>
           ) : (
-            <p className="text-slate-400 text-sm italic py-8 text-center">Nenhum produto cadastrado.</p>
+            <p className="text-slate-400 text-xs italic py-8 text-center">
+              {produtos.length === 0
+                ? "Nenhum produto cadastrado."
+                : "Nenhum produto encontrado para esses filtros."}
+            </p>
           )}
         </div>
 
@@ -413,23 +485,27 @@ export default function GeradorEtiquetasPage() {
                         <p key={i}>{aviso}</p>
                       ))}
                       <p className="uppercase text-black font-extrabold tracking-wide mt-1">
-                        INDICADO PARA CRIANÇAS MAIORES DE {(produtoSelecionado.idade_minima || "3 ANOS").replace(/^\+/, "").trim()}.
+                        {/^(\+?0+|0+\+?|\+?0\s*ano|TODAS AS IDADES)/i.test((produtoSelecionado.idade_minima || "").trim())
+                          ? "INDICADO PARA TODAS AS IDADES"
+                          : `INDICADO PARA CRIANÇAS MAIORES DE ${(produtoSelecionado.idade_minima || "3 ANOS").replace(/^\+/, "").trim()}.`}
                       </p>
                       <p className="uppercase text-black font-bold">
                         GUARDAR PARA EVENTUAIS CONSULTAS
                       </p>
                     </div>
 
-                    {/* Selo Regulamentar 0-3 Anos Idêntico ao Original */}
-                    {produtoSelecionado.restritivo_0_3_anos && (
+                    {/* Selo Regulamentar 0-3 ou 0-4 Anos Idêntico ao Original */}
+                    {(produtoSelecionado.restritivo_0_3_anos || produtoSelecionado.restritivo_0_4_anos) && (
                       <div className="absolute -right-1 top-[66%] -translate-y-1/2 w-14 h-14 flex-shrink-0">
                         <svg className="w-full h-full" viewBox="0 0 100 100">
                           {/* Círculo externo vermelho */}
                           <circle cx="50" cy="50" r="44" stroke="#DC2626" strokeWidth="8" fill="#FFF" />
                           {/* Barra diagonal vermelha cortando do topo-esquerdo ao fundo-direito */}
                           <line x1="19" y1="19" x2="81" y2="81" stroke="#DC2626" strokeWidth="8" strokeLinecap="round" />
-                          {/* Texto 0-3 */}
-                          <text x="20" y="68" fill="#000" fontSize="22" fontWeight="bold" fontFamily="Arial, Helvetica, sans-serif">0-3</text>
+                          {/* Texto 0-3 ou 0-4 */}
+                          <text x="20" y="68" fill="#000" fontSize="22" fontWeight="bold" fontFamily="Arial, Helvetica, sans-serif">
+                            {produtoSelecionado.restritivo_0_4_anos && !produtoSelecionado.restritivo_0_3_anos ? "0-4" : "0-3"}
+                          </text>
                           {/* Cabeça do bebê */}
                           <circle cx="70" cy="38" r="14" stroke="#000" strokeWidth="2.2" fill="#FFF" />
                           {/* Topete gota d'água */}
@@ -537,10 +613,8 @@ export default function GeradorEtiquetasPage() {
                                 <span>cs</span>
                               </div>
                               <span className="text-[5.5px] font-bold text-black tracking-tight mt-[7.5px] translate-y-[4.5px] whitespace-nowrap">
-                                {produtoSelecionado.inmetro_familias.codigo_ocp 
-                                  ? produtoSelecionado.inmetro_familias.codigo_ocp 
-                                  : `OCP ${produtoSelecionado.inmetro_familias.ocp_numero || "0098"}`}
-                              </span>
+  OCP {produtoSelecionado.inmetro_familias.ocp_numero || "0098"}
+</span>
                             </div>
 
                             {/* Logo Oficial INMETRO (Idêntico ao padrão Excel: mais alto com as hastes laterais) */}
