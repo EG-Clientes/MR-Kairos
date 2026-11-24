@@ -487,7 +487,10 @@ export default function GeradorEtiquetasPage() {
                       <p className="uppercase text-black font-extrabold tracking-wide mt-1">
                         {/^(\+?0+|0+\+?|\+?0\s*ano|TODAS AS IDADES)/i.test((produtoSelecionado.idade_minima || "").trim())
                           ? "INDICADO PARA TODAS AS IDADES"
-                          : `INDICADO PARA CRIANÇAS MAIORES DE ${(produtoSelecionado.idade_minima || "3 ANOS").replace(/^\+/, "").trim()}.`}
+                          : (() => {
+                              const idadeLimpa = ((produtoSelecionado.idade_minima || "3 ANOS").replace(/\+/g, "").replace(/\s+/g, " ").trim() || "3 ANOS").toUpperCase();
+                              return `INDICADO PARA CRIANÇAS MAIORES DE ${/^\d+$/.test(idadeLimpa) ? `${idadeLimpa} ANOS` : idadeLimpa}.`;
+                            })()}
                       </p>
                       <p className="uppercase text-black font-bold">
                         GUARDAR PARA EVENTUAIS CONSULTAS

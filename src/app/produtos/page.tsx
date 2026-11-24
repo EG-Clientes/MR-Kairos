@@ -643,7 +643,7 @@ export default function ProdutosPage() {
           }
         }
 
-        // Leitura opcional da Faixa Etária (ex: +4 anos, 0+, +3 anos)
+        // Leitura opcional da Faixa Etária (ex: +4 anos, 0+, +3 anos, 3+)
         let idadeFinal = "+3 anos";
         if (colunaIdade && colunaIdade !== "NONE") {
           const rawIdade = extrairTextoSeguro(row.getCell(colunaIdade)).trim();
@@ -651,12 +651,13 @@ export default function ProdutosPage() {
             if (/^(\+?0+|0+\+?|\+?0\s*ano|TODAS AS IDADES)/i.test(rawIdade)) {
               idadeFinal = "0+";
             } else {
-              idadeFinal = rawIdade;
+              const idadeLimpa = rawIdade.replace(/\+/g, "").replace(/\s+/g, " ").trim();
+              idadeFinal = /^\d+$/.test(idadeLimpa) ? `${idadeLimpa} anos` : idadeLimpa;
             }
           }
         }
 
-        // Leitura opcional da Restrição Etária (0-3, 0-4 ou Sem restrição)
+        // Leitura opcional da Restrição Etária (0-3, 0-4, restrição em meses ou Sem restrição)
         let partesPequenasFinal = true;
         let restritivo03Final = true;
         let restritivo04Final = false;
@@ -665,6 +666,10 @@ export default function ProdutosPage() {
           const rawRestr = extrairTextoSeguro(row.getCell(colunaRestricao)).trim();
           if (rawRestr) {
             if (/SEM\s*RESTRI|^N[ÃA]O$|^N[ÃA]O\s*APLIC|^NA$/i.test(rawRestr)) {
+              partesPequenasFinal = false;
+              restritivo03Final = false;
+              restritivo04Final = false;
+            } else if (/MES(ES)?|M[EÊ]S|\b\d+\s*M\b/i.test(rawRestr)) {
               partesPequenasFinal = false;
               restritivo03Final = false;
               restritivo04Final = false;

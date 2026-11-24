@@ -58,6 +58,7 @@ interface FamiliaOption {
   id: string;
   empresa_id: string;
   nome_familia: string;
+  numero_registro: string;
 }
 
 export default function LiquidificadorPage() {
@@ -108,7 +109,7 @@ export default function LiquidificadorPage() {
   async function carregarAuxiliares() {
     const [empRes, famRes, avisosRes] = await Promise.all([
       supabase.from("empresas").select("id, razao_social").order("razao_social"),
-      supabase.from("inmetro_familias").select("id, empresa_id, nome_familia").order("nome_familia"),
+      supabase.from("inmetro_familias").select("id, empresa_id, nome_familia, numero_registro").order("nome_familia"),
       supabase.from("avisos_customizados").select("id, texto_aviso"),
     ]);
     if (empRes.data) {
@@ -157,9 +158,11 @@ export default function LiquidificadorPage() {
     setSalvandoLote(true);
 
     try {
+      const familiaIdFinal = familiasFiltradas.some((f) => f.id === familiaLote) ? familiaLote : null;
+
       const novosRegistros = naoCadastrados.map((item) => ({
         empresa_id: empresaLote,
-        familia_id: null,
+        familia_id: familiaIdFinal,
         fty_no: item.fty_no,
         descricao: item.descricao,
         ean_13: item.ean_13 && /^\d{13}$/.test(item.ean_13) ? item.ean_13 : gerarEanAutomatico(),
@@ -182,16 +185,21 @@ export default function LiquidificadorPage() {
 
       setIsAlertOpen(false);
       setSalvandoLote(false);
+      setFamiliaLote("");
 
-      // Aviso de Compliance: Dá a opção de revisar no catálogo ou gerar agora
+      // Aviso de Compliance: Se já vinculou certificado, segue no fluxo; se ficou sem registro, orienta revisar no catálogo
       setModalAviso({
         isOpen: true,
         tipo: "sucesso",
         titulo: "Produtos Cadastrados com Sucesso!",
-        mensagem: `${novosRegistros.length} produtos foram adicionados ao catálogo com EAN-13 gerados automaticamente.\n\nRecomendamos acessar o Catálogo de Produtos para vincular as Famílias/Certificados Inmetro antes do envio à China.`,
+        mensagem: familiaIdFinal
+          ? `${novosRegistros.length} produtos foram adicionados ao catálogo com EAN-13 gerados e já vinculados ao certificado Inmetro selecionado.\n\nClique em "Gerar Excel" novamente para baixar sua planilha com as etiquetas.`
+          : `${novosRegistros.length} produtos foram adicionados ao catálogo com EAN-13 gerados automaticamente.\n\nRecomendamos acessar o Catálogo de Produtos para vincular as Famílias/Certificados Inmetro antes do envio à China.`,
         onConfirmar: () => {
           setModalAviso((prev) => ({ ...prev, isOpen: false }));
-          router.push("/produtos");
+          if (!familiaIdFinal) {
+            router.push("/produtos");
+          }
         },
       });
     } catch (err: any) {
@@ -393,7 +401,8 @@ export default function LiquidificadorPage() {
         }
       });
 
-      const idadeFormatada = (prod.idade_minima || "3 ANOS").replace(/^\+/, "").trim().toUpperCase();
+      const idadeLimpa = ((prod.idade_minima || "3 ANOS").replace(/\+/g, "").replace(/\s+/g, " ").trim() || "3 ANOS").toUpperCase();
+      const idadeFormatada = /^\d+$/.test(idadeLimpa) ? `${idadeLimpa} ANOS` : idadeLimpa;
       const textoIdade = /^(\+?0+|0+\+?|\+?0\s*ANO|TODAS AS IDADES)/i.test((prod.idade_minima || "").trim())
         ? "INDICADO PARA TODAS AS IDADES"
         : `INDICADO PARA CRIANÇAS MAIORES DE ${idadeFormatada}.`;
@@ -1213,6 +1222,7 @@ export default function LiquidificadorPage() {
                 onChange={(e) => {
                   setEmpresaSelecionada(e.target.value);
                   setEmpresaLote(e.target.value);
+                  setFamiliaLote("");
                 }}
                 className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
               >
@@ -1486,14 +1496,17 @@ export default function LiquidificadorPage() {
             </div>
 
             {/* Painel de Seleção para o Lote */}
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
                   Importador Dono do Lote *
                 </label>
                 <select
                   value={empresaLote}
-                  onChange={(e) => setEmpresaLote(e.target.value)}
+                  onChange={(e) => {
+                    setEmpresaLote(e.target.value);
+                    setFamiliaLote("");
+                  }}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:border-blue-500 outline-none font-medium"
                 >
                   {empresas.map((emp) => (
@@ -1502,6 +1515,30 @@ export default function LiquidificadorPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="min-w-0">
+                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Registro Inmetro (Opcional — Caso todos sejam iguais)
+                </label>
+                <select
+                  value={familiaLote}
+                  onChange={(e) => setFamiliaLote(e.target.value)}
+                  className="w-full max-w-full truncate px-3 py-2 border border-slate-200 rounded-lg text-xs bg-white focus:border-blue-500 outline-none font-medium"
+                >
+                  <option value="">Nenhum (Cadastrar sem registro Inmetro)</option>
+                  {familiasFiltradas.map((fam) => {
+                    const labelCompleta = `${fam.numero_registro} — ${fam.nome_familia}`;
+                    return (
+                      <option key={fam.id} value={fam.id} title={labelCompleta}>
+                        {labelCompleta.length > 65 ? `${labelCompleta.slice(0, 65)}...` : labelCompleta}
+                      </option>
+                    );
+                  })}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Exibe apenas certificados do importador selecionado. Se a planilha tiver certificados diferentes, deixe em "Nenhum".
+                </p>
               </div>
             </div>
 
