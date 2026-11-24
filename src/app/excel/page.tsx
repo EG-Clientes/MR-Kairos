@@ -1377,25 +1377,6 @@ export default function LiquidificadorPage() {
                 </select>
               </div>
 
-              {/* Coluna da Etiqueta Gerada */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Coluna da Etiqueta Gerada *
-                </label>
-                <select
-                  value={colunaEtiqueta}
-                  onChange={(e) => setColunaEtiqueta(e.target.value)}
-                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
-                >
-                  <option value="">-- Selecione a Coluna --</option>
-                  {OPCOES_COLUNAS_EXCEL.map((col) => (
-                    <option key={col} value={col}>
-                      Coluna {col}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               {/* Descrição Comercial */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
@@ -1428,6 +1409,25 @@ export default function LiquidificadorPage() {
                 >
                   <option value="">-- Opcional --</option>
                   <option value="NONE">Nenhuma (Não possui)</option>
+                  {OPCOES_COLUNAS_EXCEL.map((col) => (
+                    <option key={col} value={col}>
+                      Coluna {col}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Coluna da Etiqueta Gerada */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Coluna da Etiqueta Gerada *
+                </label>
+                <select
+                  value={colunaEtiqueta}
+                  onChange={(e) => setColunaEtiqueta(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                >
+                  <option value="">-- Selecione a Coluna --</option>
                   {OPCOES_COLUNAS_EXCEL.map((col) => (
                     <option key={col} value={col}>
                       Coluna {col}
