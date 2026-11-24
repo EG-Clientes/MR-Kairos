@@ -47,6 +47,10 @@ interface ItemNaoCadastrado {
   fty_no: string;
   descricao: string;
   ean_13?: string;
+  idade_minima: string;
+  partes_pequenas: boolean;
+  restritivo_0_3_anos: boolean;
+  restritivo_0_4_anos: boolean;
 }
 
 interface EmpresaOption {
@@ -67,6 +71,8 @@ export default function LiquidificadorPage() {
   const [colunaFty, setColunaFty] = useState<string>(""); // Selecionável pelo operador
   const [colunaDescricao, setColunaDescricao] = useState<string>(""); // Opcional (ajuda no desempate de Ref repetida)
   const [colunaEan, setColunaEan] = useState<string>(""); // Opcional (desempate preciso por código de barras)
+  const [colunaIdade, setColunaIdade] = useState<string>(""); // Opcional (Faixa Etária)
+  const [colunaRestricao, setColunaRestricao] = useState<string>(""); // Opcional (Restrição 0-3 / 0-4)
   const [colunaEtiqueta, setColunaEtiqueta] = useState<string>(""); // Coluna que receberá as imagens
   const [linhaInicio, setLinhaInicio] = useState<string>(""); // Linha inicial onde começam os dados reais
   const [loading, setLoading] = useState(false);
@@ -170,11 +176,11 @@ export default function LiquidificadorPage() {
         lote: `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`,
         usa_pilha: false,
         contem_ima: false,
-        partes_pequenas: true,
+        partes_pequenas: item.partes_pequenas,
         metal: false,
-        restritivo_0_3_anos: true,
-        restritivo_0_4_anos: false,
-        idade_minima: "3 ANOS",
+        restritivo_0_3_anos: item.restritivo_0_3_anos,
+        restritivo_0_4_anos: item.restritivo_0_4_anos,
+        idade_minima: item.idade_minima,
       }));
 
       const { error } = await supabase.from("produtos").insert(novosRegistros);
@@ -755,7 +761,16 @@ export default function LiquidificadorPage() {
 
       // 1. Coleta inteligente: Ignora cabeçalhos chineses e lê apenas os produtos reais
       setStatusMsg("Fazendo o Raio-X e cruzando itens com o banco...");
-      const itensPlanilha: { linha: number; fty_no: string; descricao: string; ean_13: string }[] = [];
+      const itensPlanilha: {
+        linha: number;
+        fty_no: string;
+        descricao: string;
+        ean_13: string;
+        idade_minima: string;
+        partes_pequenas: boolean;
+        restritivo_0_3_anos: boolean;
+        restritivo_0_4_anos: boolean;
+      }[] = [];
       let comecouProdutos = false;
 
       // Helper à prova de balas contra fórmulas nulas do Excel
@@ -829,11 +844,57 @@ export default function LiquidificadorPage() {
         );
 
         if (cellFty && !ehTotalizador && !ehRuidoCorporativo) {
+          // Leitura opcional da Faixa Etária (ex: +4 anos, 0+, +3 anos, 3+)
+          let idadeFinal = "+3 anos";
+          if (colunaIdade && colunaIdade !== "NONE") {
+            const rawIdade = extrairTextoSeguro(row.getCell(colunaIdade)).trim();
+            if (rawIdade && !/^(NA|NÃO APLICÁVEL|NAO APLICAVEL|-)$/i.test(rawIdade)) {
+              if (/^(\+?0+|0+\+?|\+?0\s*ano|TODAS AS IDADES)/i.test(rawIdade)) {
+                idadeFinal = "0+";
+              } else {
+                const idadeLimpa = rawIdade.replace(/\+/g, "").replace(/\s+/g, " ").trim();
+                idadeFinal = /^\d+$/.test(idadeLimpa) ? `${idadeLimpa} anos` : idadeLimpa;
+              }
+            }
+          }
+
+          // Leitura opcional da Restrição Etária (0-3, 0-4, restrição em meses ou Sem restrição)
+          let partesPequenasFinal = true;
+          let restritivo03Final = true;
+          let restritivo04Final = false;
+
+          if (colunaRestricao && colunaRestricao !== "NONE") {
+            const rawRestr = extrairTextoSeguro(row.getCell(colunaRestricao)).trim();
+            if (rawRestr) {
+              if (/SEM\s*RESTRI|^N[ÃA]O$|^N[ÃA]O\s*APLIC|^NA$/i.test(rawRestr)) {
+                partesPequenasFinal = false;
+                restritivo03Final = false;
+                restritivo04Final = false;
+              } else if (/MES(ES)?|M[EÊ]S|\b\d+\s*M\b/i.test(rawRestr)) {
+                partesPequenasFinal = false;
+                restritivo03Final = false;
+                restritivo04Final = false;
+              } else if (/0\s*[-–aA]\s*4|MENOR(ES)?\s*(DE)?\s*4/i.test(rawRestr)) {
+                partesPequenasFinal = true;
+                restritivo03Final = false;
+                restritivo04Final = true;
+              } else if (/0\s*[-–aA]\s*3|MENOR(ES)?\s*(DE)?\s*3|^SIM$/i.test(rawRestr)) {
+                partesPequenasFinal = true;
+                restritivo03Final = true;
+                restritivo04Final = false;
+              }
+            }
+          }
+
           itensPlanilha.push({
             linha: rowNumber,
             fty_no: cellFty,
             descricao: cellDesc,
             ean_13: cellEan,
+            idade_minima: idadeFinal,
+            partes_pequenas: partesPequenasFinal,
+            restritivo_0_3_anos: restritivo03Final,
+            restritivo_0_4_anos: restritivo04Final,
           });
         }
       });
@@ -939,6 +1000,10 @@ export default function LiquidificadorPage() {
               fty_no: item.fty_no,
               descricao: item.descricao || item.fty_no || "PRODUTO IMPORTADO",
               ean_13: item.ean_13 || undefined,
+              idade_minima: item.idade_minima,
+              partes_pequenas: item.partes_pequenas,
+              restritivo_0_3_anos: item.restritivo_0_3_anos,
+              restritivo_0_4_anos: item.restritivo_0_4_anos,
             });
           }
         } else {
@@ -1186,29 +1251,10 @@ export default function LiquidificadorPage() {
         
         {/* Painel de Upload e Configuração */}
         <div className="lg:col-span-8 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+          <div className="border-b border-slate-100 pb-3.5">
             <h2 className="text-base font-bold text-slate-900">
               Configuração da Planilha
             </h2>
-            <div
-              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl border transition-colors ${
-                !linhaInicio.trim()
-                  ? "bg-blue-50/90 border-blue-300 shadow-2xs"
-                  : "bg-emerald-50/60 border-emerald-200"
-              }`}
-            >
-              <label className="text-xs font-extrabold text-blue-900 uppercase tracking-wider whitespace-nowrap">
-                Iniciar na Linha
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={linhaInicio}
-                onChange={(e) => setLinhaInicio(e.target.value)}
-                placeholder="..."
-                className="w-24 px-2.5 py-1.5 border border-blue-300 rounded-lg text-sm bg-white text-slate-900 font-mono font-extrabold text-center outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20"
-              />
-            </div>
           </div>
 
           {/* 1. SELETOR DE IMPORTADOR DA CARGA */}
@@ -1283,81 +1329,157 @@ export default function LiquidificadorPage() {
             </label>
           </div>
 
-          {/* Seletores de Colunas com suporte total de A até AZ */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Coluna do Código (FTY) 
-              </label>
-              <select
-                value={colunaFty}
-                onChange={(e) => setColunaFty(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
+          {/* Mapeamento de Colunas Padronizado (Suporte total de A até AZ) */}
+          <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80 space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-2.5">
+              <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block">
+                Mapeamento de Colunas
+              </span>
+
+              <div
+                className={`flex items-center gap-2 px-2.5 py-1 rounded-xl border transition-colors ${
+                  !linhaInicio.trim()
+                    ? "bg-blue-50/90 border-blue-300 shadow-2xs"
+                    : "bg-emerald-50/60 border-emerald-200"
+                }`}
               >
-                <option value="">-- Selecione a Coluna --</option>
-                {OPCOES_COLUNAS_EXCEL.map((col) => (
-                  <option key={col} value={col}>
-                    Coluna {col}
-                  </option>
-                ))}
-              </select>
+                <label className="text-[11px] font-extrabold text-blue-900 uppercase tracking-wider whitespace-nowrap">
+                  Iniciar na Linha
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={linhaInicio}
+                  onChange={(e) => setLinhaInicio(e.target.value)}
+                  placeholder="..."
+                  className="w-24 px-2 py-1 border border-blue-300 rounded-lg text-xs bg-white text-slate-900 font-mono font-extrabold text-center outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Coluna da Etiqueta Gerada
-              </label>
-              <select
-                value={colunaEtiqueta}
-                onChange={(e) => setColunaEtiqueta(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
-              >
-                <option value="">-- Selecione a Coluna --</option>
-                {OPCOES_COLUNAS_EXCEL.map((col) => (
-                  <option key={col} value={col}>
-                    Coluna {col}
-                  </option>
-                ))}
-              </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              {/* Código / Ref / FTY */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Código / Ref / FTY *
+                </label>
+                <select
+                  value={colunaFty}
+                  onChange={(e) => setColunaFty(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                >
+                  <option value="">-- Selecione a Coluna --</option>
+                  {OPCOES_COLUNAS_EXCEL.map((col) => (
+                    <option key={col} value={col}>
+                      Coluna {col}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Coluna da Etiqueta Gerada */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Coluna da Etiqueta Gerada *
+                </label>
+                <select
+                  value={colunaEtiqueta}
+                  onChange={(e) => setColunaEtiqueta(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                >
+                  <option value="">-- Selecione a Coluna --</option>
+                  {OPCOES_COLUNAS_EXCEL.map((col) => (
+                    <option key={col} value={col}>
+                      Coluna {col}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Descrição Comercial */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Descrição Comercial
+                </label>
+                <select
+                  value={colunaDescricao}
+                  onChange={(e) => setColunaDescricao(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                >
+                  <option value="">-- Opcional --</option>
+                  <option value="NONE">Nenhuma (Não possui)</option>
+                  {OPCOES_COLUNAS_EXCEL.map((col) => (
+                    <option key={col} value={col}>
+                      Coluna {col}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Código de Barras (EAN-13) */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Código de Barras (EAN-13)
+                </label>
+                <select
+                  value={colunaEan}
+                  onChange={(e) => setColunaEan(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                >
+                  <option value="">-- Opcional --</option>
+                  <option value="NONE">Nenhuma (Não possui)</option>
+                  {OPCOES_COLUNAS_EXCEL.map((col) => (
+                    <option key={col} value={col}>
+                      Coluna {col}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Indicação de Faixa Etária */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Indicação de Faixa Etária
+                </label>
+                <select
+                  value={colunaIdade}
+                  onChange={(e) => setColunaIdade(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                >
+                  <option value="">-- Opcional (Padrão +3 anos) --</option>
+                  <option value="NONE">Nenhuma (Usar padrão +3 anos)</option>
+                  {OPCOES_COLUNAS_EXCEL.map((col) => (
+                    <option key={col} value={col}>
+                      Coluna {col}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Restrição Etária (0-3 / 0-4) */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Restrição Etária (0-3 / 0-4)
+                </label>
+                <select
+                  value={colunaRestricao}
+                  onChange={(e) => setColunaRestricao(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                >
+                  <option value="">-- Opcional (Padrão 0-3) --</option>
+                  <option value="NONE">Nenhuma (Usar padrão 0-3)</option>
+                  {OPCOES_COLUNAS_EXCEL.map((col) => (
+                    <option key={col} value={col}>
+                      Coluna {col}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Coluna da Descrição
-              </label>
-              <select
-                value={colunaDescricao}
-                onChange={(e) => setColunaDescricao(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
-              >
-                <option value="">-- Opcional --</option>
-                <option value="NONE">Nenhuma (Não possui)</option>
-                {OPCOES_COLUNAS_EXCEL.map((col) => (
-                  <option key={col} value={col}>
-                    Coluna {col}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Coluna do EAN-13
-              </label>
-              <select
-                value={colunaEan}
-                onChange={(e) => setColunaEan(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition font-semibold"
-              >
-                <option value="">-- Opcional --</option>
-                <option value="NONE">Nenhuma (Não possui)</option>
-                {OPCOES_COLUNAS_EXCEL.map((col) => (
-                  <option key={col} value={col}>
-                    Coluna {col}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <p className="text-[10px] text-slate-700 pt-1">
+              * Produtos novos nascerão com as proteções padrão de brinquedos (0-3 anos ativo). Ajustes pontuais podem ser feitos na edição individual.
+            </p>
           </div>
 
           {/* Botão de Processar */}
