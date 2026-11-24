@@ -520,16 +520,34 @@ export default function ProdutosPage() {
         throw new Error("Nenhuma aba encontrada na planilha.");
       }
 
-      // 1. Busca produtos existentes desse importador para travar duplicidades (Código + Descrição + EAN)
-      const { data: prodsExistentes, error: errProd } = await supabase
-        .from("produtos")
-        .select("fty_no, descricao, ean_13")
-        .eq("empresa_id", excelEmpresaId);
+      // 1. Busca produtos existentes paginado (>1000) para travar duplicidades sem limite
+      const todosProdsBanco: any[] = [];
+      let paginaProd = 0;
+      const tamanhoPaginaProd = 1000;
+      while (true) {
+        const { data, error: errProd } = await supabase
+          .from("produtos")
+          .select("empresa_id, fty_no, descricao, ean_13")
+          .order("created_at")
+          .range(paginaProd * tamanhoPaginaProd, (paginaProd + 1) * tamanhoPaginaProd - 1);
 
-      if (errProd) throw new Error("Erro ao consultar catálogo existente: " + errProd.message);
+        if (errProd) throw new Error("Erro ao consultar catálogo existente: " + errProd.message);
+        if (!data || data.length === 0) break;
+        todosProdsBanco.push(...data);
+        if (data.length < tamanhoPaginaProd) break;
+        paginaProd++;
+      }
+
+      const prodsExistentes = todosProdsBanco.filter((p) => p.empresa_id === excelEmpresaId);
+
+      const eansNoBanco = new Map<string, { fty_no: string; empresa_id: string }>();
+      todosProdsBanco.forEach((p) => {
+        const ean = (p.ean_13 || "").replace(/["'\s-]/g, "").trim().toUpperCase();
+        if (ean) eansNoBanco.set(ean, { fty_no: p.fty_no, empresa_id: p.empresa_id });
+      });
 
       const chavesExistentes3 = new Set(
-        (prodsExistentes || []).map((p) => {
+        prodsExistentes.map((p) => {
           const cod = (p.fty_no || "").trim().toUpperCase();
           const desc = (p.descricao || "").trim().toUpperCase();
           const ean = (p.ean_13 || "").replace(/["'\s-]/g, "").trim().toUpperCase();
@@ -538,7 +556,7 @@ export default function ProdutosPage() {
       );
 
       const chavesExistentes2 = new Set(
-        (prodsExistentes || []).map((p) => {
+        prodsExistentes.map((p) => {
           const cod = (p.fty_no || "").trim().toUpperCase();
           const desc = (p.descricao || "").trim().toUpperCase();
           return `${cod}:::${desc}`;
@@ -579,6 +597,8 @@ export default function ProdutosPage() {
 
       const numLinhaCorte = linhaInicio.trim() ? parseInt(linhaInicio.trim(), 10) : null;
       const processadosNestaPlanilha = new Set<string>();
+      const eansNaPlanilha = new Map<string, { codigo: string; linha: number }>();
+      const conflitosEan: string[] = [];
       const novosProdutos: any[] = [];
       let totalIgnorados = 0;
       let totalVinculadosComInmetro = 0;
@@ -631,7 +651,32 @@ export default function ProdutosPage() {
 
         processadosNestaPlanilha.add(chaveUnica);
 
-        const eanFinal = eanLimpo || gerarEan13Valido();
+        if (eanLimpo) {
+          const conflitoBanco = eansNoBanco.get(eanNorm);
+          if (conflitoBanco) {
+            conflitosEan.push(
+              conflitoBanco.empresa_id === excelEmpresaId
+                ? `Linha ${rowNumber} (${rawCodigo}): o EAN ${eanLimpo} já está cadastrado no produto "${conflitoBanco.fty_no}".`
+                : `Linha ${rowNumber} (${rawCodigo}): o EAN ${eanLimpo} já está cadastrado em outro importador no sistema.`
+            );
+            return;
+          }
+          const conflitoPlanilha = eansNaPlanilha.get(eanNorm);
+          if (conflitoPlanilha) {
+            conflitosEan.push(
+              `Linha ${rowNumber} (${rawCodigo}): o EAN ${eanLimpo} está duplicado com o item "${conflitoPlanilha.codigo}" (Linha ${conflitoPlanilha.linha}).`
+            );
+            return;
+          }
+        }
+
+        let eanFinal = eanLimpo;
+        if (!eanFinal) {
+          do {
+            eanFinal = gerarEan13Valido();
+          } while (eansNoBanco.has(eanFinal) || eansNaPlanilha.has(eanFinal));
+        }
+        eansNaPlanilha.set(eanFinal.toUpperCase(), { codigo: rawCodigo, linha: rowNumber });
 
         // CASAMENTO AUTOMÁTICO COM INMETRO (Coluna C da BRICS)
         let familiaIdFinal: string | null = null;
@@ -707,6 +752,12 @@ export default function ProdutosPage() {
         });
       });
 
+      if (conflitosEan.length > 0) {
+        const resumoConflitos = conflitosEan.slice(0, 3).join("\n");
+        const extra = conflitosEan.length > 3 ? `\n...e mais ${conflitosEan.length - 3} conflito(s) de EAN.` : "";
+        throw new Error(`Código de barras (EAN-13) duplicado:\n${resumoConflitos}${extra}`);
+      }
+
       if (novosProdutos.length === 0) {
         setImportandoExcel(false);
         setIsModalExcelOpen(false);
@@ -723,7 +774,12 @@ export default function ProdutosPage() {
 
       // Insere produtos em lote no banco
       const { error: insertError } = await supabase.from("produtos").insert(novosProdutos);
-      if (insertError) throw new Error("Erro ao salvar produtos no banco: " + insertError.message);
+      if (insertError) {
+        if (insertError.code === "23505") {
+          throw new Error("Um ou mais códigos de barras (EAN-13) desta planilha já existem no catálogo ou estão duplicados em produtos diferentes.");
+        }
+        throw new Error("Erro ao salvar produtos no banco: " + insertError.message);
+      }
 
       await carregarDados();
       setIsModalExcelOpen(false);

@@ -166,26 +166,89 @@ export default function LiquidificadorPage() {
     try {
       const familiaIdFinal = familiasFiltradas.some((f) => f.id === familiaLote) ? familiaLote : null;
 
-      const novosRegistros = naoCadastrados.map((item) => ({
-        empresa_id: empresaLote,
-        familia_id: familiaIdFinal,
-        fty_no: item.fty_no,
-        descricao: item.descricao,
-        ean_13: item.ean_13 && /^\d{13}$/.test(item.ean_13) ? item.ean_13 : gerarEanAutomatico(),
-        data_fabricacao: `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`,
-        lote: `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`,
-        usa_pilha: false,
-        contem_ima: false,
-        partes_pequenas: item.partes_pequenas,
-        metal: false,
-        restritivo_0_3_anos: item.restritivo_0_3_anos,
-        restritivo_0_4_anos: item.restritivo_0_4_anos,
-        idade_minima: item.idade_minima,
-      }));
+      const eansNoBanco = new Map<string, { fty_no: string; empresa_id: string }>();
+      let paginaEan = 0;
+      const tamanhoPaginaEan = 1000;
+      while (true) {
+        const { data: loteEan, error: errEan } = await supabase
+          .from("produtos")
+          .select("empresa_id, fty_no, ean_13")
+          .order("id")
+          .range(paginaEan * tamanhoPaginaEan, (paginaEan + 1) * tamanhoPaginaEan - 1);
+        if (errEan) throw new Error("Erro ao validar códigos de barras no catálogo: " + errEan.message);
+        if (!loteEan || loteEan.length === 0) break;
+        loteEan.forEach((p: any) => {
+          const ean = (p.ean_13 || "").replace(/["'\s-]/g, "").trim().toUpperCase();
+          if (ean) eansNoBanco.set(ean, { fty_no: p.fty_no, empresa_id: p.empresa_id });
+        });
+        if (loteEan.length < tamanhoPaginaEan) break;
+        paginaEan++;
+      }
+
+      const eansNoLote = new Map<string, { codigo: string; linha: number }>();
+      const conflitosEan: string[] = [];
+
+      const novosRegistros = naoCadastrados.map((item) => {
+        const eanInformado = item.ean_13 && /^\d{13}$/.test(item.ean_13) ? item.ean_13 : "";
+        if (eanInformado) {
+          const eanNorm = eanInformado.toUpperCase();
+          const conflitoBanco = eansNoBanco.get(eanNorm);
+          if (conflitoBanco) {
+            conflitosEan.push(
+              conflitoBanco.empresa_id === empresaLote
+                ? `Linha ${item.linha} (${item.fty_no}): o EAN ${eanInformado} já está cadastrado no produto "${conflitoBanco.fty_no}".`
+                : `Linha ${item.linha} (${item.fty_no}): o EAN ${eanInformado} já está cadastrado em outro importador no sistema.`
+            );
+          } else {
+            const conflitoLote = eansNoLote.get(eanNorm);
+            if (conflitoLote) {
+              conflitosEan.push(
+                `Linha ${item.linha} (${item.fty_no}): o EAN ${eanInformado} está duplicado com o item "${conflitoLote.codigo}" (Linha ${conflitoLote.linha}).`
+              );
+            } else {
+              eansNoLote.set(eanNorm, { codigo: item.fty_no, linha: item.linha });
+            }
+          }
+        }
+
+        let eanFinal = eanInformado;
+        if (!eanFinal) {
+          do {
+            eanFinal = gerarEanAutomatico();
+          } while (eansNoBanco.has(eanFinal) || eansNoLote.has(eanFinal));
+          eansNoLote.set(eanFinal.toUpperCase(), { codigo: item.fty_no, linha: item.linha });
+        }
+
+        return {
+          empresa_id: empresaLote,
+          familia_id: familiaIdFinal,
+          fty_no: item.fty_no,
+          descricao: item.descricao,
+          ean_13: eanFinal,
+          data_fabricacao: `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`,
+          lote: `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`,
+          usa_pilha: false,
+          contem_ima: false,
+          partes_pequenas: item.partes_pequenas,
+          metal: false,
+          restritivo_0_3_anos: item.restritivo_0_3_anos,
+          restritivo_0_4_anos: item.restritivo_0_4_anos,
+          idade_minima: item.idade_minima,
+        };
+      });
+
+      if (conflitosEan.length > 0) {
+        const resumo = conflitosEan.slice(0, 3).join("\n");
+        const extra = conflitosEan.length > 3 ? `\n...e mais ${conflitosEan.length - 3} conflito(s) de EAN.` : "";
+        throw new Error(`Código de barras (EAN-13) duplicado:\n${resumo}${extra}`);
+      }
 
       const { error } = await supabase.from("produtos").insert(novosRegistros);
 
       if (error) {
+        if (error.code === "23505") {
+          throw new Error("Um ou mais códigos de barras (EAN-13) já existem no catálogo ou estão duplicados em produtos diferentes.");
+        }
         throw new Error("Erro ao cadastrar produtos em lote: " + error.message);
       }
 
@@ -923,6 +986,8 @@ export default function LiquidificadorPage() {
             inmetro_familias(nome_familia, numero_registro, ocp_nome, ocp_numero, codigo_ocp, status, data_validade)
           `)
           .eq("empresa_id", empresaSelecionada)
+          .order("created_at")
+          .order("id")
           .range(pagina * tamanhoPagina, (pagina + 1) * tamanhoPagina - 1);
 
         if (prodError) {

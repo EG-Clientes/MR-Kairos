@@ -146,12 +146,29 @@ export default function CertificadosPage() {
   async function carregarDados() {
     setLoading(true);
 
+    const buscarTodosCertificados = async () => {
+      const acumulados: any[] = [];
+      let pagina = 0;
+      const tamanhoPagina = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from("inmetro_familias")
+          .select("*, empresas(razao_social)")
+          .order("created_at")
+          .order("id")
+          .range(pagina * tamanhoPagina, (pagina + 1) * tamanhoPagina - 1);
+        if (error) return { data: null, error };
+        if (!data || data.length === 0) break;
+        acumulados.push(...data);
+        if (data.length < tamanhoPagina) break;
+        pagina++;
+      }
+      return { data: acumulados, error: null };
+    };
+
     // Carrega certificados e empresas em paralelo
     const [certResult, empResult] = await Promise.all([
-      supabase
-        .from("inmetro_familias")
-        .select("*, empresas(razao_social)")
-        .order("created_at"),
+      buscarTodosCertificados(),
       supabase
         .from("empresas")
         .select("id, razao_social")
@@ -407,14 +424,25 @@ export default function CertificadosPage() {
         throw new Error("Nenhuma aba encontrada na planilha.");
       }
 
-      // 1. Busca todos os certificados já existentes no banco para esse importador
-      const { data: certsExistentes, error: buscaError } = await supabase
-        .from("inmetro_familias")
-        .select("numero_registro, nome_familia, codigo_ocp")
-        .eq("empresa_id", excelEmpresaId);
+      // 1. Busca todos os certificados já existentes no banco para esse importador (paginado >1000)
+      const certsExistentes: any[] = [];
+      let paginaCert = 0;
+      const tamanhoPaginaCert = 1000;
+      while (true) {
+        const { data: loteCert, error: buscaError } = await supabase
+          .from("inmetro_familias")
+          .select("numero_registro, nome_familia, codigo_ocp")
+          .eq("empresa_id", excelEmpresaId)
+          .order("id")
+          .range(paginaCert * tamanhoPaginaCert, (paginaCert + 1) * tamanhoPaginaCert - 1);
 
-      if (buscaError) {
-        throw new Error("Erro ao consultar certificados existentes: " + buscaError.message);
+        if (buscaError) {
+          throw new Error("Erro ao consultar certificados existentes: " + buscaError.message);
+        }
+        if (!loteCert || loteCert.length === 0) break;
+        certsExistentes.push(...loteCert);
+        if (loteCert.length < tamanhoPaginaCert) break;
+        paginaCert++;
       }
 
       // Conjunto único combinando: NÚMERO DA FAMÍLIA (Coluna C) + NOME (Coluna D) + REGISTRO
