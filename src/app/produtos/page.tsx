@@ -88,6 +88,7 @@ export default function ProdutosPage() {
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelEmpresaId, setExcelEmpresaId] = useState<string>("");
   const [linhaInicio, setLinhaInicio] = useState<string>("");
+  const [colunaRefImportador, setColunaRefImportador] = useState<string>("");
   const [colunaCodigo, setColunaCodigo] = useState<string>("");
   const [colunaDescricao, setColunaDescricao] = useState<string>("");
   const [colunaEan, setColunaEan] = useState<string>("");
@@ -381,6 +382,11 @@ export default function ProdutosPage() {
       eanFinal = gerarEan13Valido();
     }
 
+    const ftyVal = formData.fty_no.trim();
+    const refVal = formData.referencia_interna.trim();
+    const codigoFinal = ftyVal || refVal;
+    const refFinal = refVal || ftyVal;
+
     if (editingId) {
       // MODO EDICAO
       const { error: updateError } = await supabase
@@ -388,8 +394,8 @@ export default function ProdutosPage() {
         .update({
           empresa_id: formData.empresa_id,
           familia_id: formData.familia_id || null,
-          fty_no: formData.fty_no,
-          referencia_interna: formData.referencia_interna.trim() || null,
+          fty_no: codigoFinal,
+          referencia_interna: refFinal,
           descricao: formData.descricao,
           ean_13: eanFinal || null,
           ean_barras: formData.ean_barras.trim() || null,
@@ -420,8 +426,8 @@ export default function ProdutosPage() {
         {
           empresa_id: formData.empresa_id,
           familia_id: formData.familia_id || null,
-          fty_no: formData.fty_no,
-          referencia_interna: formData.referencia_interna.trim() || null,
+          fty_no: codigoFinal,
+          referencia_interna: refFinal,
           descricao: formData.descricao,
           ean_13: eanFinal,
           ean_barras: formData.ean_barras.trim() || null,
@@ -488,12 +494,15 @@ export default function ProdutosPage() {
       return;
     }
 
-    if (!colunaCodigo) {
+    const ftyInformado = colunaCodigo && colunaCodigo !== "NONE";
+    const refInformada = colunaRefImportador && colunaRefImportador !== "NONE";
+
+    if (!ftyInformado && !refInformada) {
       setModalAviso({
         isOpen: true,
         tipo: "alerta",
-        titulo: "Coluna do Código Obrigatória",
-        mensagem: "Selecione qual coluna contém o Código do Produto (Ref / FTY).",
+        titulo: "Identificação do Produto Obrigatória",
+        mensagem: "Selecione pelo menos uma coluna de código: Ref. do Importador ou Código da Fábrica (FTY).",
       });
       return;
     }
@@ -610,11 +619,18 @@ export default function ProdutosPage() {
           if (rowNumber < numLinhaCorte) return;
         }
 
-        const rawCodigo = extrairTextoSeguro(row.getCell(colunaCodigo));
+        const rawFty = (colunaCodigo && colunaCodigo !== "NONE") ? extrairTextoSeguro(row.getCell(colunaCodigo)) : "";
+        const rawRefImp = (colunaRefImportador && colunaRefImportador !== "NONE") ? extrairTextoSeguro(row.getCell(colunaRefImportador)) : "";
+
+        // Código principal: se não tem um, usa o outro
+        const rawCodigo = rawFty || rawRefImp;
         if (!rawCodigo) return;
 
+        const ftyFinal = rawFty || rawRefImp;
+        const refImportadorFinal = rawRefImp || rawFty;
+
         // Lista negra de cabeçalhos
-        const cabecalhosIgnorar = ["ITEM", "REF", "FTY", "CÓDIGO", "CODIGO", "REFERÊNCIA", "MODELO", "PRODUTO"];
+        const cabecalhosIgnorar = ["ITEM", "REF", "FTY", "CÓDIGO", "CODIGO", "REFERÊNCIA", "MODELO", "PRODUTO", "ITEM NO", "ITEM NO."];
         if (cabecalhosIgnorar.includes(rawCodigo.trim().toUpperCase())) return;
 
         // Descrição comercial
@@ -734,8 +750,8 @@ export default function ProdutosPage() {
         novosProdutos.push({
           empresa_id: excelEmpresaId,
           familia_id: familiaIdFinal,
-          fty_no: rawCodigo,
-          referencia_interna: rawCodigo,
+          fty_no: ftyFinal,
+          referencia_interna: refImportadorFinal,
           descricao: rawDesc.toUpperCase(),
           ean_13: eanFinal,
           ean_barras: null,
@@ -829,7 +845,8 @@ export default function ProdutosPage() {
       const termo = buscaNome.toLowerCase();
       const bateDescricao = prod.descricao.toLowerCase().includes(termo);
       const bateFty = prod.fty_no.toLowerCase().includes(termo);
-      if (!bateDescricao && !bateFty) return false;
+      const bateRef = (prod.referencia_interna || "").toLowerCase().includes(termo);
+      if (!bateDescricao && !bateFty && !bateRef) return false;
     }
 
     if (filtroEmpresa && prod.empresa_id !== filtroEmpresa) return false;
@@ -1020,7 +1037,7 @@ export default function ProdutosPage() {
                 type="text"
                 value={buscaNome}
                 onChange={(e) => setBuscaNome(e.target.value)}
-                placeholder="Nome ou código FTY..."
+                placeholder="Nome ou código..."
                 className="w-full pl-8 pr-7 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:border-blue-500 outline-none transition font-medium"
               />
               <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1276,7 +1293,20 @@ export default function ProdutosPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
                   <div>
                     <label className="block text-xs font-bold text-slate-900 mb-1">
-                      Código / Ref / FTY  *
+                      Ref. do Importador (Ref. Comercial)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.referencia_interna}
+                      onChange={(e) => setFormData({ ...formData, referencia_interna: e.target.value })}
+                      placeholder="Ex: STN-080124-24"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition font-mono font-semibold bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                      Código da Fábrica (ITEM NO / FTY) *
                     </label>
                     <input
                       type="text"
@@ -1285,19 +1315,6 @@ export default function ProdutosPage() {
                       onChange={(e) => setFormData({ ...formData, fty_no: e.target.value })}
                       placeholder="Ex: 3117"
                       className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition font-mono font-bold bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-900 mb-1">
-                      Ref. do Importador
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.referencia_interna}
-                      onChange={(e) => setFormData({ ...formData, referencia_interna: e.target.value })}
-                      placeholder="Ex: STN-080124-24"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 outline-none transition font-mono font-semibold bg-white"
                     />
                   </div>
                 </div>
@@ -1797,10 +1814,28 @@ export default function ProdutosPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                  {/* Código do Produto */}
+                  {/* LINHA 1 ESQUERDA: Ref. do Importador */}
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Código / Ref / FTY *
+                      Ref. do Importador (Ref. Comercial)
+                    </label>
+                    <select
+                      value={colunaRefImportador}
+                      onChange={(e) => setColunaRefImportador(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      <option value="">-- Selecione a Coluna --</option>
+                      <option value="NONE">Nenhuma (Duplicar Código Fábrica)</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* LINHA 1 DIREITA: Código da Fábrica */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Código da Fábrica (ITEM NO / FTY)
                     </label>
                     <select
                       value={colunaCodigo}
@@ -1808,13 +1843,14 @@ export default function ProdutosPage() {
                       className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
                     >
                       <option value="">-- Selecione a Coluna --</option>
+                      <option value="NONE">Nenhuma (Duplicar Ref. Importador)</option>
                       {OPCOES_COLUNAS_EXCEL.map((col) => (
                         <option key={col} value={col}>Coluna {col}</option>
                       ))}
                     </select>
                   </div>
 
-                  {/* Descrição */}
+                  {/* LINHA 2 ESQUERDA: Descrição Comercial */}
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
                       Descrição Comercial *
@@ -1831,7 +1867,7 @@ export default function ProdutosPage() {
                     </select>
                   </div>
 
-                  {/* EAN-13 */}
+                  {/* LINHA 2 DIREITA: EAN-13 */}
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
                       Código de Barras (EAN-13)
@@ -1849,25 +1885,7 @@ export default function ProdutosPage() {
                     </select>
                   </div>
 
-                  {/* Vínculo Inmetro (Coluna C) */}
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Nº da Família Inmetro (Vínculo)
-                    </label>
-                    <select
-                      value={colunaFamilia}
-                      onChange={(e) => setColunaFamilia(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
-                    >
-                      <option value="">-- Selecione a Coluna --</option>
-                      <option value="NONE">Nenhuma (Deixar sem registro)</option>
-                      {OPCOES_COLUNAS_EXCEL.map((col) => (
-                        <option key={col} value={col}>Coluna {col}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Indicação de Faixa Etária (Opcional) */}
+                  {/* LINHA 3 ESQUERDA: Faixa Etária */}
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
                       Indicação de Faixa Etária
@@ -1885,7 +1903,25 @@ export default function ProdutosPage() {
                     </select>
                   </div>
 
-                  {/* Restrição Etária 0-3 / 0-4 / Sem restrição (Opcional) */}
+                  {/* LINHA 3 DIREITA: Família Inmetro */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Nº da Família Inmetro (Vínculo)
+                    </label>
+                    <select
+                      value={colunaFamilia}
+                      onChange={(e) => setColunaFamilia(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                    >
+                      <option value="">-- Selecione a Coluna --</option>
+                      <option value="NONE">Nenhuma (Deixar sem registro)</option>
+                      {OPCOES_COLUNAS_EXCEL.map((col) => (
+                        <option key={col} value={col}>Coluna {col}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* LINHA 4 ESQUERDA: Restrição Etária */}
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
                       Restrição Etária (0-3 / 0-4)

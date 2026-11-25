@@ -68,7 +68,8 @@ interface FamiliaOption {
 export default function LiquidificadorPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
-  const [colunaFty, setColunaFty] = useState<string>(""); // Selecionável pelo operador
+  const [colunaRefImportador, setColunaRefImportador] = useState<string>(""); // Ref. do Importador
+  const [colunaFty, setColunaFty] = useState<string>(""); // Código da Fábrica
   const [colunaDescricao, setColunaDescricao] = useState<string>(""); // Opcional (ajuda no desempate de Ref repetida)
   const [colunaEan, setColunaEan] = useState<string>(""); // Opcional (desempate preciso por código de barras)
   const [colunaIdade, setColunaIdade] = useState<string>(""); // Opcional (Faixa Etária)
@@ -223,6 +224,7 @@ export default function LiquidificadorPage() {
           empresa_id: empresaLote,
           familia_id: familiaIdFinal,
           fty_no: item.fty_no,
+          referencia_interna: (item as any).referencia_interna || item.fty_no,
           descricao: item.descricao,
           ean_13: eanFinal,
           data_fabricacao: `${String(new Date().getMonth() + 1).padStart(2, "0")}/${new Date().getFullYear()}`,
@@ -791,12 +793,25 @@ export default function LiquidificadorPage() {
       return;
     }
 
-    if (!colunaFty || !colunaEtiqueta) {
+    const ftyInformado = colunaFty && colunaFty !== "NONE";
+    const refInformada = colunaRefImportador && colunaRefImportador !== "NONE";
+
+    if (!ftyInformado && !refInformada) {
       setModalAviso({
         isOpen: true,
         tipo: "alerta",
-        titulo: "Colunas Obrigatórias",
-        mensagem: "Selecione a Coluna do Código (FTY) e a Coluna da Etiqueta antes de gerar a planilha.",
+        titulo: "Identificação do Produto Obrigatória",
+        mensagem: "Selecione pelo menos uma coluna de identificação: Ref. do Importador ou Código da Fábrica.",
+      });
+      return;
+    }
+
+    if (!colunaEtiqueta) {
+      setModalAviso({
+        isOpen: true,
+        tipo: "alerta",
+        titulo: "Coluna da Etiqueta Obrigatória",
+        mensagem: "Selecione a Coluna da Etiqueta Gerada antes de processar a planilha.",
       });
       return;
     }
@@ -861,7 +876,10 @@ export default function LiquidificadorPage() {
           if (rowNumber < numLinhaCorte) return;
         }
 
-        const cellFty = extrairTextoSeguro(row.getCell(colunaFty));
+        const rawFty = (colunaFty && colunaFty !== "NONE") ? extrairTextoSeguro(row.getCell(colunaFty)) : "";
+        const rawRefImp = (colunaRefImportador && colunaRefImportador !== "NONE") ? extrairTextoSeguro(row.getCell(colunaRefImportador)) : "";
+        const cellFty = rawFty || rawRefImp;
+        const cellRefInterna = rawRefImp || rawFty;
 
         // Captura a descrição opcional (usada para desempate de Ref repetida ou cadastro novo)
         let cellDesc = (colunaDescricao && colunaDescricao !== "NONE")
@@ -952,13 +970,14 @@ export default function LiquidificadorPage() {
           itensPlanilha.push({
             linha: rowNumber,
             fty_no: cellFty,
+            referencia_interna: cellRefInterna,
             descricao: cellDesc,
             ean_13: cellEan,
             idade_minima: idadeFinal,
             partes_pequenas: partesPequenasFinal,
             restritivo_0_3_anos: restritivo03Final,
             restritivo_0_4_anos: restritivo04Final,
-          });
+          } as any);
         }
       });
 
@@ -999,14 +1018,22 @@ export default function LiquidificadorPage() {
         pagina++;
       }
 
-      // Agrupa em lista por FTY NO para suportar múltiplos produtos com a mesma referência
+      // Agrupa tanto por FTY quanto por Referência Interna para achar o produto de qualquer jeito
       const produtosPorFty = new Map<string, ProdutoDB[]>();
       produtosBanco.forEach((p: any) => {
-        const chave = (p.fty_no || "").trim().toUpperCase();
-        if (!chave) return;
-        const lista = produtosPorFty.get(chave) || [];
-        lista.push(p);
-        produtosPorFty.set(chave, lista);
+        const chaveFty = (p.fty_no || "").trim().toUpperCase();
+        const chaveRef = (p.referencia_interna || "").trim().toUpperCase();
+
+        if (chaveFty) {
+          const lista = produtosPorFty.get(chaveFty) || [];
+          if (!lista.some((item) => item.id === p.id)) lista.push(p);
+          produtosPorFty.set(chaveFty, lista);
+        }
+        if (chaveRef && chaveRef !== chaveFty) {
+          const listaRef = produtosPorFty.get(chaveRef) || [];
+          if (!listaRef.some((item) => item.id === p.id)) listaRef.push(p);
+          produtosPorFty.set(chaveRef, listaRef);
+        }
       });
 
       const limparEan = (val?: string | null) => (val || "").replace(/["'\s-]/g, "").trim().toUpperCase();
@@ -1423,17 +1450,18 @@ export default function LiquidificadorPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-              {/* Código / Ref / FTY */}
+              {/* LINHA 1 ESQUERDA: Ref. do Importador */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Código / Ref / FTY *
+                  Ref. do Importador (Ref. Comercial)
                 </label>
                 <select
-                  value={colunaFty}
-                  onChange={(e) => setColunaFty(e.target.value)}
+                  value={colunaRefImportador}
+                  onChange={(e) => setColunaRefImportador(e.target.value)}
                   className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
                 >
                   <option value="">-- Selecione a Coluna --</option>
+                  <option value="NONE">Nenhuma (Usar Código Fábrica)</option>
                   {OPCOES_COLUNAS_EXCEL.map((col) => (
                     <option key={col} value={col}>
                       Coluna {col}
@@ -1442,7 +1470,27 @@ export default function LiquidificadorPage() {
                 </select>
               </div>
 
-              {/* Descrição Comercial */}
+              {/* LINHA 1 DIREITA: Código da Fábrica */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Código da Fábrica (ITEM NO / FTY)
+                </label>
+                <select
+                  value={colunaFty}
+                  onChange={(e) => setColunaFty(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                >
+                  <option value="">-- Selecione a Coluna --</option>
+                  <option value="NONE">Nenhuma (Usar Ref. Importador)</option>
+                  {OPCOES_COLUNAS_EXCEL.map((col) => (
+                    <option key={col} value={col}>
+                      Coluna {col}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* LINHA 2 ESQUERDA: Descrição Comercial */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
                   Descrição Comercial
@@ -1462,7 +1510,7 @@ export default function LiquidificadorPage() {
                 </select>
               </div>
 
-              {/* Código de Barras (EAN-13) */}
+              {/* LINHA 2 DIREITA: EAN-13 */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
                   Código de Barras (EAN-13)
@@ -1482,26 +1530,7 @@ export default function LiquidificadorPage() {
                 </select>
               </div>
 
-              {/* Coluna da Etiqueta Gerada */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Coluna da Etiqueta Gerada *
-                </label>
-                <select
-                  value={colunaEtiqueta}
-                  onChange={(e) => setColunaEtiqueta(e.target.value)}
-                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
-                >
-                  <option value="">-- Selecione a Coluna --</option>
-                  {OPCOES_COLUNAS_EXCEL.map((col) => (
-                    <option key={col} value={col}>
-                      Coluna {col}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Indicação de Faixa Etária */}
+              {/* LINHA 3 ESQUERDA: Faixa Etária */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
                   Indicação de Faixa Etária
@@ -1521,7 +1550,26 @@ export default function LiquidificadorPage() {
                 </select>
               </div>
 
-              {/* Restrição Etária (0-3 / 0-4) */}
+              {/* LINHA 3 DIREITA: Coluna da Etiqueta Gerada */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Coluna da Etiqueta Gerada *
+                </label>
+                <select
+                  value={colunaEtiqueta}
+                  onChange={(e) => setColunaEtiqueta(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 font-semibold outline-none"
+                >
+                  <option value="">-- Selecione a Coluna --</option>
+                  {OPCOES_COLUNAS_EXCEL.map((col) => (
+                    <option key={col} value={col}>
+                      Coluna {col}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* LINHA 4 ESQUERDA: Restrição Etária */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
                   Restrição Etária (0-3 / 0-4)
